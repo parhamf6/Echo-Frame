@@ -1,0 +1,603 @@
+# ============================================================
+# Watch Party Monorepo - Complete .gitignore
+# ============================================================
+
+# ============================================================
+# ENVIRONMENT & SECRETS
+# ============================================================
+.env
+.env.*
+!.env.example
+*.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Secrets and credentials
+secrets/
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+id_rsa*
+*.pub
+
+# API keys and tokens
+.api-keys
+tokens/
+credentials/
+
+# ============================================================
+# FRONTEND (Next.js / React)
+# ============================================================
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# Production build
+frontend/.vercel
+frontend/.netlify
+
+# Cache
+frontend/.cache/
+frontend/.parcel-cache/
+frontend/.nuxt/
+frontend/.vuepress/dist
+
+# Static files generated
+frontend/public/uploads/
+frontend/public/videos/
+
+# Testing
+frontend/coverage/
+frontend/.nyc_output/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+
+# Storybook
+frontend/storybook-static/
+
+# ============================================================
+# BACKEND (Python / FastAPI)
+# ============================================================
+
+# Python
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/**/*.py[cod]
+backend/**/*$py.class
+
+# Virtual environments
+backend/venv/
+backend/env/
+backend/ENV/
+backend/.venv/
+backend/.env/
+backend/virtualenv/
+backend/.python-version
+
+# Distribution / packaging
+backend/.Python
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.eggs/
+backend/lib/
+backend/lib64/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/share/python-wheels/
+backend/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/MANIFEST
+
+# PyInstaller
+backend/*.manifest
+backend/*.spec
+
+# Unit test / coverage reports
+backend/htmlcov/
+backend/.tox/
+backend/.nox/
+backend/.coverage
+backend/.coverage.*
+backend/coverage.xml
+backend/*.cover
+backend/*.log
+backend/.pytest_cache/
+backend/.hypothesis/
+backend/pytestdebug.log
+
+# Celery
+backend/celerybeat-schedule
+backend/celerybeat.pid
+
+# Jupyter Notebook
+backend/.ipynb_checkpoints
+
+# IPython
+backend/profile_default/
+backend/ipython_config.py
+
+# pyenv
+backend/.python-version
+
+# pipenv
+backend/Pipfile.lock
+
+# poetry
+backend/poetry.lock
+
+# PEP 582
+backend/__pypackages__/
+
+# mypy
+backend/.mypy_cache/
+backend/.dmypy.json
+backend/dmypy.json
+
+# Pyre type checker
+backend/.pyre/
+
+# pytype static type analyzer
+backend/.pytype/
+
+# Cython debug symbols
+backend/cython_debug/
+
+# ============================================================
+# CLI TOOL (Python)
+# ============================================================
+
+# Python (same as backend)
+cli-tool/__pycache__/
+cli-tool/**/__pycache__/
+cli-tool/*.py[cod]
+cli-tool/*$py.class
+cli-tool/venv/
+cli-tool/.venv/
+cli-tool/dist/
+cli-tool/build/
+cli-tool/*.egg-info/
+
+# Processed videos (temporary)
+cli-tool/output/
+cli-tool/temp/
+cli-tool/processed/
+
+# ============================================================
+# DATABASE
+# ============================================================
+
+# PostgreSQL
+*.sql
+*.dump
+*.backup
+pgdata/
+postgres-data/
+
+# SQLite (if used for testing)
+*.db
+*.sqlite
+*.sqlite3
+
+# Database backups
+backups/
+db-backups/
+*.sql.gz
+*.dump.gz
+
+# Alembic
+backend/alembic/versions/__pycache__/
+
+# ============================================================
+# DOCKER & CONTAINERS
+# ============================================================
+
+# Docker volumes
+docker-volumes/
+volumes/
+data/
+
+# Docker Compose override (for local development)
+docker-compose.override.yml
+
+# Container logs
+containers/
+*.log
+
+# ============================================================
+# VIDEO STORAGE & MEDIA FILES
+# ============================================================
+
+# Uploaded videos
+storage/
+media/
+videos/
+uploads/
+
+# HLS segments
+*.m3u8
+*.ts
+*.m4s
+
+# Video files
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+*.flv
+*.webm
+*.m4v
+
+# Audio files
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+
+# Thumbnails
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+*.svg
+!frontend/public/**/*.jpg
+!frontend/public/**/*.jpeg
+!frontend/public/**/*.png
+!frontend/public/**/*.gif
+!frontend/public/**/*.svg
+!docs/**/*.png
+!docs/**/*.jpg
+
+# ============================================================
+# NGINX
+# ============================================================
+
+# Nginx logs
+nginx/logs/
+nginx/*.log
+
+# SSL certificates (keep examples)
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+!nginx/ssl/.gitkeep
+!nginx/ssl/README.md
+
+# ============================================================
+# NODE & NPM
+# ============================================================
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+cli-tool/node_modules/
+jspm_packages/
+
+# npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# pnpm
+pnpm-lock.yaml
+.pnpm-store/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# ============================================================
+# IDE & EDITORS
+# ============================================================
+
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# JetBrains (PyCharm, WebStorm, IntelliJ)
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+
+# ============================================================
+# OPERATING SYSTEM
+# ============================================================
+
+# macOS
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================================
+# LOGS & TEMPORARY FILES
+# ============================================================
+
+# Logs
+logs/
+*.log
+log/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# ============================================================
+# TESTING
+# ============================================================
+
+# Test coverage
+coverage/
+.nyc_output/
+htmlcov/
+*.cover
+*.lcov
+
+# Test databases
+test.db
+test.sqlite
+
+# Test uploads
+test-uploads/
+test-videos/
+
+# ============================================================
+# CI/CD
+# ============================================================
+
+# GitHub Actions
+.github/workflows/secrets.yml
+
+# CircleCI
+.circleci/config.local.yml
+
+# GitLab CI
+.gitlab-ci.local.yml
+
+# ============================================================
+# DOCUMENTATION
+# ============================================================
+
+# Generated docs
+docs/_build/
+docs/.doctrees/
+site/
+_site/
+
+# MkDocs
+mkdocs/site/
+
+# ============================================================
+# MONITORING & ANALYTICS
+# ============================================================
+
+# Sentry
+.sentryclirc
+
+# NewRelic
+newrelic.ini
+
+# ============================================================
+# MISCELLANEOUS
+# ============================================================
+
+# Backups
+*.bak
+*.backup
+*.old
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Lock files (keep package-lock.json and requirements.txt)
+!package-lock.json
+!frontend/package-lock.json
+!requirements.txt
+!backend/requirements.txt
+!cli-tool/requirements.txt
+
+# Minified files
+*.min.js
+*.min.css
+
+# Source maps
+*.map
+
+# FFmpeg temporary files
+ffmpeg_*
+*.ffmpeg
+
+# WebRTC/Socket.io debug
+socket-debug.log
+
+# MinIO data (if running locally)
+minio-data/
+.minio.sys/
+
+# Localization
+*.mo
+*.pot
+
+# Compiled source
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Package manager directories
+bower_components/
+
+# Sass
+.sass-cache/
+
+# TypeScript
+*.tsbuildinfo
+frontend/.tsbuildinfo
+frontend/next-env.d.ts
+
+# Turbo
+.turbo/
+
+# Sentry
+.sentryclirc
+
+# ============================================================
+# PROJECT SPECIFIC
+# ============================================================
+
+# Room data (if stored locally for dev)
+room-data/
+
+# User uploads during development
+dev-uploads/
+dev-storage/
+
+# Local test files
+test-*.mp4
+test-*.m3u8
+sample-videos/
+
+# Local configuration overrides
+local.config.js
+local.config.json
+
+# Performance monitoring
+*.trace
+*.cpuprofile
+*.heapsnapshot
+
+# ============================================================
+# KEEP THESE FILES (Important!)
+# ============================================================
+
+# Keep example/template files
+!.env.example
+!.env.local.example
+!docker-compose.example.yml
+!config.example.json
+
+# Keep documentation images
+!docs/images/**
+!README_assets/**
+
+# Keep gitkeep files for empty directories
+!**/.gitkeep
+
+# Keep CI/CD templates
+!.github/workflows/*.yml
+!.gitlab-ci.yml
+!.circleci/config.yml
