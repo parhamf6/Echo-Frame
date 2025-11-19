@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { Play, Users, Video, MessageSquare, Mic, Github, LogIn, Link2, Sparkles, Radio, Clock, Shield } from 'lucide-react';
+import { motion, useScroll, useTransform } from 'framer-motion';
 import BentoGrid from './bento-features';
 import { SliderHeroText } from './slider-text';
 import { AnimatedGradient } from '@/components/animated-gradient';
+import TextType from '@/components/text-animation/type-animation';
 
 export default function Hero() {
   const [activeRooms, setActiveRooms] = useState(0);
@@ -12,6 +14,11 @@ export default function Hero() {
   const [hoursWatched, setHoursWatched] = useState(0);
   const [roomCode, setRoomCode] = useState('');
   const [isVisible, setIsVisible] = useState(false);
+  const { scrollY } = useScroll();
+  
+  // Transform values for scroll animations - CTA section only
+  const ctaScale = useTransform(scrollY, [700, 1000], [0.8, 1]);
+  const ctaY = useTransform(scrollY, [700, 1000], [50, 0]);
 
   useEffect(() => {
     setIsVisible(true);
@@ -49,27 +56,69 @@ export default function Hero() {
     { icon: Github, title: "Open Source", desc: "Free & community-driven" },
   ];
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.2,
+        delayChildren: 0.3,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut" as const,
+      },
+    },
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground mt-20">
       <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         
-        <section className={`text-center mb-20 transition-all duration-1000 delay-200 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6 animate-pulse-soft">
+        <motion.section 
+          className="text-center mb-20"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false, amount: 0.3 }}
+          variants={containerVariants}
+        >
+          <motion.div 
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6 animate-pulse-soft"
+            variants={itemVariants}
+          >
             <Radio className="w-4 h-4 text-primary animate-ping-slow" />
             <span className="text-sm font-medium text-primary">Live & Self-Hosted</span>
-          </div>
+          </motion.div>
 
-          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight text-foreground">
+          <motion.h2 
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight text-foreground"
+            variants={itemVariants}
+          >
             Movie night — <span><SliderHeroText/></span>
-          </h2>
-          
+          </motion.h2>
 
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
-            Self-hosted watch party platform with real-time video sync, voice chat, and live messaging. 
-            <span className="text-foreground font-medium"> Privacy-first, open source, built for communities.</span>
-          </p>
+          <motion.p 
+            className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed flex flex-col gap-2"
+            variants={itemVariants}
+          >
+            <span>Self-hosted watch party platform with real-time video sync, voice chat, and live messaging. </span>
+            <span className='font-medium text-foreground text-xl sm:text-2xl font-display'>
+              Privacy-first, Open Source ,built for communities.
+            </span>
+          </motion.p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+          <motion.div 
+            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16"
+            variants={itemVariants}
+          >
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
               <div className="relative group">
                 <input
@@ -90,39 +139,26 @@ export default function Hero() {
                 Join Room
               </button>
             </div>
-          </div>
+          </motion.div>
+        </motion.section>
+        <motion.div
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: false, amount: 0.2 }}
+          variants={containerVariants}
+        >
+          <BentoGrid/>
+        </motion.div>
 
-          {/* <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
-            {[
-              { label: "Active Rooms", value: activeRooms, icon: Video },
-              { label: "Users Online", value: totalUsers, icon: Users },
-              { label: "Hours Watched", value: hoursWatched, icon: Clock },
-            ].map((stat, idx) => (
-              <div
-                key={stat.label}
-                className="relative group"
-                style={{ animationDelay: `${idx * 100}ms` }}
-              >
-                <div className="p-6 rounded-2xl bg-card border border-border shadow-md hover:shadow-xl hover:border-primary/30 transition-all duration-300 hover:scale-105">
-                  <div className="flex items-center justify-center mb-3">
-                    <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 group-hover:bg-primary/15 transition-colors duration-300">
-                      <stat.icon className="w-6 h-6 text-primary" />
-                    </div>
-                  </div>
-                  <div className="text-3xl font-bold mb-1 text-foreground">
-                    {stat.value}
-                  </div>
-                  <div className="text-sm text-muted-foreground font-medium">
-                    {stat.label}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div> */}
-        </section>
-        <BentoGrid/>
-        <section className={`transition-all duration-1000 delay-800 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'} mt-10`}>
-          <div className="relative overflow-hidden rounded-3xl border border-border shadow-xl">
+        <motion.section 
+          style={{ scale: ctaScale, y: ctaY }}
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          viewport={{ once: false, amount: 0.3 }}
+          transition={{ duration: 1 }}
+          className={`transition-all duration-1000 delay-800 mt-10`}
+        >
+          <div className="relative overflow-hidden rounded-3xl shadow-2xl border-1 border-chart-2">
             {/* <div className="absolute inset-0 -z-10 h-full w-full items-center px-5 py-24 [background:radial-gradient(125%_125%_at_50%_10%,#000_40%,#63e_100%)]"></div> */}
             <AnimatedGradient 
               variant="mesh" 
@@ -156,7 +192,7 @@ export default function Hero() {
               </div>
             </div>
           </div>
-        </section>
+        </motion.section>
       </main>
     </div>
   );
