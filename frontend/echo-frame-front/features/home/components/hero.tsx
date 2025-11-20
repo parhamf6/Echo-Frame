@@ -151,21 +151,21 @@ export default function Hero() {
         </motion.div>
 
         <motion.section 
-          style={{ scale: ctaScale, y: ctaY }}
+          style={{ scale: ctaScale, y: ctaY, pointerEvents: 'auto' }}
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: false, amount: 0.3 }}
           transition={{ duration: 1 }}
           className={`transition-all duration-1000 delay-800 mt-10`}
         >
-          <div className="relative overflow-hidden rounded-3xl shadow-2xl border-1 border-chart-2">
+          <div className="relative overflow-hidden rounded-3xl shadow-2xl border border-chart-2">
             {/* <div className="absolute inset-0 -z-10 h-full w-full items-center px-5 py-24 [background:radial-gradient(125%_125%_at_50%_10%,#000_40%,#63e_100%)]"></div> */}
             <AnimatedGradient 
               variant="mesh" 
               colors={['accent-2']} 
               speed="normal" 
             />
-            <div className="p-12 text-center">
+            <div className="relative p-12 text-center z-10">
               <h3 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
                 Ready to host your own
                 <span className="text-primary"> watch parties?</span>
@@ -178,14 +178,14 @@ export default function Hero() {
                   href="https://github.com/yourusername/echo-room"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-8 py-4 rounded-xl bg-foreground text-background font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 group"
+                  className="flex items-center gap-2 px-8 py-4 rounded-xl bg-foreground text-background font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 group relative z-20"
                 >
                   <Github className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" />
                   View on GitHub
                 </a>
                 <a
                   href="/docs"
-                  className="flex items-center gap-2 px-8 py-4 rounded-xl bg-card border border-border shadow-md hover:shadow-lg hover:border-primary/30 font-medium hover:scale-105 transition-all duration-300"
+                  className="flex items-center gap-2 px-8 py-4 rounded-xl bg-card border border-border shadow-md hover:shadow-lg hover:border-primary/30 font-medium hover:scale-105 transition-all duration-300 relative z-20"
                 >
                   Read Docs
                 </a>
