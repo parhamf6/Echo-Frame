@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Figtree, Literata, Victor_Mono, Playfair_Display } from 'next/font/google';
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeTransition } from "@/components/theme-transation";
 
 const figtree = Figtree({ subsets: ['latin'], variable: '--font-sans' });
 const literata = Literata({ subsets: ['latin'], variable: '--font-serif' });
@@ -17,7 +18,9 @@ export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>) {
+}>)
+ {
+  
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -29,6 +32,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          {/* <ThemeTransition /> */}
           {children}
         </ThemeProvider>
       </body>

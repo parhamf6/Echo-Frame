@@ -1,37 +1,3 @@
-// // src/components/ThemeToggle.tsx
-// "use client";
-
-// import { Moon, Sun } from 'lucide-react';
-// import { useTheme } from 'next-themes';
-// import { useEffect, useState } from 'react';
-
-// export function ThemeToggle() {
-//   const [mounted, setMounted] = useState(false);
-//   const { theme, setTheme } = useTheme();
-
-//   useEffect(() => {
-//     setMounted(true);
-//   }, []);
-
-//   if (!mounted) {
-//     return (
-//       <div className="w-10 h-10 rounded-lg bg-card border border-border" />
-//     );
-//   }
-
-//   return (
-//     <button
-//       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-//       className="relative w-10 h-10 rounded-lg bg-card border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all duration-300 flex items-center justify-center group"
-//       aria-label="Toggle theme"
-//     >
-//       <Sun className="w-5 h-5 text-foreground absolute transition-all duration-300 rotate-0 scale-100 dark:-rotate-90 dark:scale-0" />
-//       <Moon className="w-5 h-5 text-foreground absolute transition-all duration-300 rotate-90 scale-0 dark:rotate-0 dark:scale-100" />
-//     </button>
-//   );
-// }
-
-
 // src/components/ThemeToggle.tsx
 "use client";
 
@@ -64,12 +30,15 @@ export function ThemeToggle() {
       whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
     >
-      {/* Background glow effect */}
+      {/* Subtle background glow */}
       <motion.div
-        className="absolute inset-0 bg-primary/10 rounded-lg"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isDark ? 1 : 0 }}
-        transition={{ duration: 0.3 }}
+        className="absolute inset-0 rounded-lg"
+        animate={{
+          background: isDark 
+            ? 'radial-gradient(circle at center, rgba(var(--primary), 0.15), transparent 70%)' 
+            : 'radial-gradient(circle at center, rgba(var(--primary), 0.08), transparent 70%)'
+        }}
+        transition={{ duration: 0.5 }}
       />
 
       {/* Sun icon */}
@@ -81,8 +50,8 @@ export function ThemeToggle() {
             animate={{ rotate: 0, scale: 1, opacity: 1 }}
             exit={{ rotate: 90, scale: 0, opacity: 0 }}
             transition={{ 
-              duration: 0.4,
-              ease: [0.34, 1.56, 0.64, 1]
+              duration: 0.5,
+              ease: [0.22, 1, 0.36, 1]
             }}
             className="absolute"
           >
@@ -100,8 +69,8 @@ export function ThemeToggle() {
             animate={{ rotate: 0, scale: 1, opacity: 1 }}
             exit={{ rotate: -90, scale: 0, opacity: 0 }}
             transition={{ 
-              duration: 0.4,
-              ease: [0.34, 1.56, 0.64, 1]
+              duration: 0.5,
+              ease: [0.22, 1, 0.36, 1]
             }}
             className="absolute"
           >
@@ -110,41 +79,22 @@ export function ThemeToggle() {
         )}
       </AnimatePresence>
 
-      {/* Particle effects on click */}
-      {mounted && (
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          initial={false}
-        >
-          {[...Array(6)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="absolute w-1 h-1 rounded-full bg-primary"
-              style={{
-                left: '50%',
-                top: '50%',
-              }}
-              animate={{
-                x: [0, Math.cos((i * Math.PI * 2) / 6) * 20],
-                y: [0, Math.sin((i * Math.PI * 2) / 6) * 20],
-                opacity: [0, 1, 0],
-                scale: [0, 1.5, 0],
-              }}
-              transition={{
-                duration: 0.6,
-                ease: "easeOut",
-                times: [0, 0.3, 1],
-              }}
-            />
-          ))}
-        </motion.div>
-      )}
+      {/* Subtle ripple effect */}
+      <motion.div
+        className="absolute inset-0 rounded-lg border-2 border-primary/30"
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 0 }}
+        transition={{ 
+          duration: 1.5,
+          repeat: Infinity,
+          repeatType: "reverse"
+        }}
+      />
     </motion.button>
   );
 }
 
-
-// ALTERNATIVE VERSION: Slider Toggle
+// Slider version with enhanced animations
 export function ThemeToggleSlider() {
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
@@ -164,31 +114,31 @@ export function ThemeToggleSlider() {
   return (
     <motion.button
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="relative w-14 h-8 rounded-full bg-card border border-border shadow-sm hover:shadow-md transition-all duration-300 flex items-center px-1"
+      className="relative w-14 h-8 rounded-full bg-card border border-border shadow-sm hover:shadow-md transition-all duration-300 flex items-center px-1 overflow-hidden"
       aria-label="Toggle theme"
       whileTap={{ scale: 0.95 }}
     >
-      {/* Background gradient */}
+      {/* Animated background */}
       <motion.div
         className="absolute inset-0 rounded-full"
         animate={{
           background: isDark 
-            ? 'linear-gradient(to right, rgba(var(--primary), 0.1), rgba(var(--primary), 0.2))' 
+            ? 'linear-gradient(to right, rgba(var(--primary), 0.15), rgba(var(--primary), 0.25))' 
             : 'linear-gradient(to right, rgba(var(--primary), 0.05), rgba(var(--primary), 0.1))'
         }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: 0.5 }}
       />
 
-      {/* Sliding circle */}
+      {/* Sliding circle with enhanced animation */}
       <motion.div
-        className="relative w-6 h-6 rounded-full bg-primary shadow-md flex items-center justify-center"
+        className="relative w-6 h-6 rounded-full bg-primary shadow-md flex items-center justify-center z-10"
         animate={{
           x: isDark ? 24 : 0,
         }}
         transition={{
           type: "spring",
-          stiffness: 500,
-          damping: 30,
+          stiffness: 400,
+          damping: 25,
         }}
       >
         <AnimatePresence mode="wait">
@@ -198,7 +148,7 @@ export function ThemeToggleSlider() {
               initial={{ rotate: -180, opacity: 0 }}
               animate={{ rotate: 0, opacity: 1 }}
               exit={{ rotate: 180, opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.4 }}
             >
               <Sun className="w-3.5 h-3.5 text-primary-foreground" />
             </motion.div>
@@ -208,7 +158,7 @@ export function ThemeToggleSlider() {
               initial={{ rotate: 180, opacity: 0 }}
               animate={{ rotate: 0, opacity: 1 }}
               exit={{ rotate: -180, opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.4 }}
             >
               <Moon className="w-3.5 h-3.5 text-primary-foreground" />
             </motion.div>
@@ -216,23 +166,32 @@ export function ThemeToggleSlider() {
         </AnimatePresence>
       </motion.div>
 
-      {/* Icons in background */}
+      {/* Subtle track indicators */}
       <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none">
         <motion.div
-          animate={{ opacity: isDark ? 0.3 : 0 }}
-          transition={{ duration: 0.2 }}
+          animate={{ opacity: isDark ? 0.2 : 0.4 }}
+          transition={{ duration: 0.3 }}
         >
           <Sun className="w-3 h-3 text-muted-foreground" />
         </motion.div>
         <motion.div
-          animate={{ opacity: isDark ? 0 : 0.3 }}
-          transition={{ duration: 0.2 }}
+          animate={{ opacity: isDark ? 0.4 : 0.2 }}
+          transition={{ duration: 0.3 }}
         >
           <Moon className="w-3 h-3 text-muted-foreground" />
         </motion.div>
       </div>
+
+      {/* Subtle glow effect */}
+      <motion.div
+        className="absolute inset-0 rounded-full opacity-30"
+        animate={{
+          background: isDark 
+            ? 'radial-gradient(circle at center, rgba(var(--primary), 0.4), transparent 70%)' 
+            : 'radial-gradient(circle at center, rgba(var(--primary), 0.2), transparent 70%)'
+        }}
+        transition={{ duration: 0.5 }}
+      />
     </motion.button>
   );
 }
-
-

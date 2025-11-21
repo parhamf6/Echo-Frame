@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: echoframe_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: echouser
+      POSTGRES_PASSWORD: echopass
+      POSTGRES_DB: echoframe
+    ports:
+      - "5432:5432"  # map host port 5432 to container
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
