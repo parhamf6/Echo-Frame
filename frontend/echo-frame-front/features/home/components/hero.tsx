@@ -6,7 +6,6 @@ import { motion, useScroll, useTransform } from 'framer-motion';
 import BentoGrid from './bento-features';
 import { SliderHeroText } from './slider-text';
 import { AnimatedGradient } from '@/components/animated-gradient';
-import TextType from '@/components/text-animation/type-animation';
 
 export default function Hero() {
   const [activeRooms, setActiveRooms] = useState(0);
@@ -49,7 +48,7 @@ export default function Hero() {
 
   const features = [
     { icon: Video, title: "Smooth Streaming", desc: "Netflix-quality HLS streaming" },
-    { icon: Users, title: "Watch Together", desc: "Up to 20 people per room" },
+    { icon: Users, title: "Watch Together", desc: "Up to 100 people per room" },
     { icon: MessageSquare, title: "Live Chat", desc: "Reactions & message history" },
     { icon: Mic, title: "Voice Chat", desc: "Crystal clear WebRTC audio" },
     { icon: Shield, title: "Self-Hosted", desc: "Your data, your control" },
@@ -120,7 +119,7 @@ export default function Hero() {
             variants={itemVariants}
           >
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <div className="relative group">
+              {/* <div className="relative group">
                 <input
                   type="text"
                   value={roomCode}
@@ -130,7 +129,7 @@ export default function Hero() {
                   maxLength={8}
                   onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
                 />
-              </div>
+              </div> */}
               <button
                 onClick={handleJoinRoom}
                 className="flex items-center justify-center gap-2 px-6 py-3.5 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 shadow-md hover:shadow-lg hover:scale-105 transition-all duration-300 group"
@@ -138,7 +137,9 @@ export default function Hero() {
                 <Link2 className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" />
                 Join Room
               </button>
+              
             </div>
+            
           </motion.div>
         </motion.section>
         <motion.div
@@ -175,7 +176,7 @@ export default function Hero() {
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <a
-                  href="https://github.com/yourusername/echo-room"
+                  href="https://github.com/parhamf6/Echo-Frame"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 px-8 py-4 rounded-xl bg-foreground text-background font-medium shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 group relative z-20"
@@ -184,10 +185,10 @@ export default function Hero() {
                   View on GitHub
                 </a>
                 <a
-                  href="/docs"
+                  href="/learn"
                   className="flex items-center gap-2 px-8 py-4 rounded-xl bg-card border border-border shadow-md hover:shadow-lg hover:border-primary/30 font-medium hover:scale-105 transition-all duration-300 relative z-20"
                 >
-                  Read Docs
+                  Learn More
                 </a>
               </div>
             </div>

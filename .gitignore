@@ -1,5 +1,5 @@
 # ============================================================
-# Watch Party Monorepo - Complete .gitignore
+# Echo Frame - Complete .gitignore
 # ============================================================
 
 # ============================================================
@@ -30,179 +30,234 @@ id_rsa*
 tokens/
 credentials/
 
+# LiveKit secrets
+livekit/.env.livekit
+livekit/secrets/
+
 # ============================================================
-# FRONTEND (Next.js / React)
+# FRONTEND (Next.js 14+ App Router)
 # ============================================================
 
-# Next.js
-frontend/.next/
-frontend/out/
-frontend/build/
-frontend/dist/
+# Next.js build output
+frontend/echo-frame-front/.next/
+frontend/echo-frame-front/out/
+frontend/echo-frame-front/build/
+frontend/echo-frame-front/dist/
 
-# Production build
-frontend/.vercel
-frontend/.netlify
+# Next.js cache
+frontend/echo-frame-front/.cache/
+frontend/echo-frame-front/.turbo/
 
-# Cache
-frontend/.cache/
-frontend/.parcel-cache/
-frontend/.nuxt/
-frontend/.vuepress/dist
-
-# Static files generated
-frontend/public/uploads/
-frontend/public/videos/
+# Next.js environment
+frontend/echo-frame-front/.env.local
+frontend/echo-frame-front/.env.development.local
+frontend/echo-frame-front/.env.test.local
+frontend/echo-frame-front/.env.production.local
 
 # Testing
-frontend/coverage/
-frontend/.nyc_output/
-frontend/test-results/
-frontend/playwright-report/
-frontend/playwright/.cache/
+frontend/echo-frame-front/coverage/
+frontend/echo-frame-front/.nyc_output/
+frontend/echo-frame-front/test-results/
+frontend/echo-frame-front/playwright-report/
+frontend/echo-frame-front/playwright/.cache/
 
-# Storybook
-frontend/storybook-static/
+# TypeScript
+frontend/echo-frame-front/.tsbuildinfo
+frontend/echo-frame-front/next-env.d.ts
+
+# Vercel/Netlify (if deploying)
+frontend/echo-frame-front/.vercel
+frontend/echo-frame-front/.netlify
+
+# Node modules
+frontend/echo-frame-front/node_modules/
 
 # ============================================================
-# BACKEND (Python / FastAPI)
+# BACKEND (FastAPI + Python)
 # ============================================================
 
-# Python
-backend/__pycache__/
-backend/**/__pycache__/
-backend/*.py[cod]
-backend/*$py.class
-backend/**/*.py[cod]
-backend/**/*$py.class
+# Python bytecode
+backend/echoframe_api/__pycache__/
+backend/echoframe_api/**/__pycache__/
+backend/echoframe_api/*.py[cod]
+backend/echoframe_api/*$py.class
+backend/echoframe_api/**/*.py[cod]
+backend/echoframe_api/**/*$py.class
 
 # Virtual environments
-backend/venv/
-backend/env/
-backend/ENV/
-backend/.venv/
-backend/.env/
-backend/virtualenv/
-backend/.python-version
+backend/echoframe_api/venv/
+backend/echoframe_api/env/
+backend/echoframe_api/ENV/
+backend/echoframe_api/.venv/
+backend/echoframe_api/virtualenv/
 
 # Distribution / packaging
-backend/.Python
-backend/build/
-backend/develop-eggs/
-backend/dist/
-backend/downloads/
-backend/eggs/
-backend/.eggs/
-backend/lib/
-backend/lib64/
-backend/parts/
-backend/sdist/
-backend/var/
-backend/wheels/
-backend/share/python-wheels/
-backend/*.egg-info/
-backend/.installed.cfg
-backend/*.egg
-backend/MANIFEST
+backend/echoframe_api/.Python
+backend/echoframe_api/build/
+backend/echoframe_api/develop-eggs/
+backend/echoframe_api/dist/
+backend/echoframe_api/downloads/
+backend/echoframe_api/eggs/
+backend/echoframe_api/.eggs/
+backend/echoframe_api/lib/
+backend/echoframe_api/lib64/
+backend/echoframe_api/parts/
+backend/echoframe_api/sdist/
+backend/echoframe_api/var/
+backend/echoframe_api/wheels/
+backend/echoframe_api/share/python-wheels/
+backend/echoframe_api/*.egg-info/
+backend/echoframe_api/.installed.cfg
+backend/echoframe_api/*.egg
+backend/echoframe_api/MANIFEST
 
-# PyInstaller
-backend/*.manifest
-backend/*.spec
+# Testing & coverage
+backend/echoframe_api/htmlcov/
+backend/echoframe_api/.tox/
+backend/echoframe_api/.nox/
+backend/echoframe_api/.coverage
+backend/echoframe_api/.coverage.*
+backend/echoframe_api/coverage.xml
+backend/echoframe_api/*.cover
+backend/echoframe_api/*.log
+backend/echoframe_api/.pytest_cache/
+backend/echoframe_api/.hypothesis/
+backend/echoframe_api/pytestdebug.log
 
-# Unit test / coverage reports
-backend/htmlcov/
-backend/.tox/
-backend/.nox/
-backend/.coverage
-backend/.coverage.*
-backend/coverage.xml
-backend/*.cover
-backend/*.log
-backend/.pytest_cache/
-backend/.hypothesis/
-backend/pytestdebug.log
+# Celery (if added later)
+backend/echoframe_api/celerybeat-schedule
+backend/echoframe_api/celerybeat.pid
 
-# Celery
-backend/celerybeat-schedule
-backend/celerybeat.pid
-
-# Jupyter Notebook
-backend/.ipynb_checkpoints
-
-# IPython
-backend/profile_default/
-backend/ipython_config.py
-
-# pyenv
-backend/.python-version
-
-# pipenv
-backend/Pipfile.lock
-
-# poetry
-backend/poetry.lock
-
-# PEP 582
-backend/__pypackages__/
-
-# mypy
-backend/.mypy_cache/
-backend/.dmypy.json
-backend/dmypy.json
+# mypy type checking
+backend/echoframe_api/.mypy_cache/
+backend/echoframe_api/.dmypy.json
+backend/echoframe_api/dmypy.json
 
 # Pyre type checker
-backend/.pyre/
+backend/echoframe_api/.pyre/
 
 # pytype static type analyzer
-backend/.pytype/
+backend/echoframe_api/.pytype/
 
-# Cython debug symbols
-backend/cython_debug/
+# Jupyter Notebook
+backend/echoframe_api/.ipynb_checkpoints
+
+# IPython
+backend/echoframe_api/profile_default/
+backend/echoframe_api/ipython_config.py
+
+# Alembic bytecode
+backend/echoframe_api/alembic/versions/__pycache__/
 
 # ============================================================
-# CLI TOOL (Python)
+# VIDEO STORAGE (Critical!)
 # ============================================================
 
-# Python (same as backend)
+# Local file storage - uploaded videos
+backend/echoframe_api/storage/
+backend/echoframe_api/storage/videos/
+backend/echoframe_api/storage/subtitles/
+
+# HLS video files (keep structure, ignore content)
+*.m3u8
+*.ts
+*.m4s
+
+# Raw video files (should be processed locally, not committed)
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.mpg
+*.mpeg
+
+# Audio files
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.m4a
+
+# Video thumbnails (generated)
+backend/echoframe_api/storage/**/thumbnail.jpg
+backend/echoframe_api/storage/**/thumbnail.png
+
+# Keep storage directory structure
+!backend/echoframe_api/storage/.gitkeep
+!backend/echoframe_api/storage/videos/.gitkeep
+!backend/echoframe_api/storage/subtitles/.gitkeep
+
+# ============================================================
+# CLI TOOL (FFmpeg Processor)
+# ============================================================
+
+# Python bytecode
 cli-tool/__pycache__/
 cli-tool/**/__pycache__/
 cli-tool/*.py[cod]
 cli-tool/*$py.class
+
+# Virtual environment
 cli-tool/venv/
 cli-tool/.venv/
+cli-tool/env/
+
+# Distribution
 cli-tool/dist/
 cli-tool/build/
 cli-tool/*.egg-info/
 
-# Processed videos (temporary)
+# CLI output directories (processed videos)
 cli-tool/output/
 cli-tool/temp/
 cli-tool/processed/
+cli-tool/test-output/
+
+# User config (contains server URL and tokens)
+cli-tool/config.yaml
+cli-tool/.echo-frame/
+
+# Test videos for CLI development
+cli-tool/test-videos/
+cli-tool/sample-*.mp4
 
 # ============================================================
 # DATABASE
 # ============================================================
 
-# PostgreSQL
+# PostgreSQL data (Docker volume)
+pgdata/
+postgres-data/
+postgresql-data/
+
+# Database backups
+backups/
+db-backups/
 *.sql
 *.dump
 *.backup
-pgdata/
-postgres-data/
+*.sql.gz
+*.dump.gz
 
 # SQLite (if used for testing)
 *.db
 *.sqlite
 *.sqlite3
 
-# Database backups
-backups/
-db-backups/
-*.sql.gz
-*.dump.gz
+# ============================================================
+# REDIS
+# ============================================================
 
-# Alembic
-backend/alembic/versions/__pycache__/
+# Redis data (Docker volume)
+redis-data/
+dump.rdb
+appendonly.aof
 
 # ============================================================
 # DOCKER & CONTAINERS
@@ -213,61 +268,13 @@ docker-volumes/
 volumes/
 data/
 
-# Docker Compose override (for local development)
+# Docker Compose override (for local dev)
 docker-compose.override.yml
+docker-compose.local.yml
 
 # Container logs
 containers/
-*.log
-
-# ============================================================
-# VIDEO STORAGE & MEDIA FILES
-# ============================================================
-
-# Uploaded videos
-storage/
-media/
-videos/
-uploads/
-
-# HLS segments
-*.m3u8
-*.ts
-*.m4s
-
-# Video files
-*.mp4
-*.avi
-*.mkv
-*.mov
-*.wmv
-*.flv
-*.webm
-*.m4v
-
-# Audio files
-*.mp3
-*.wav
-*.flac
-*.aac
-*.ogg
-*.wma
-
-# Thumbnails
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.webp
-*.svg
-!frontend/public/**/*.jpg
-!frontend/public/**/*.jpeg
-!frontend/public/**/*.png
-!frontend/public/**/*.gif
-!frontend/public/**/*.svg
-!docs/**/*.png
-!docs/**/*.jpg
+docker-logs/
 
 # ============================================================
 # NGINX
@@ -276,13 +283,38 @@ uploads/
 # Nginx logs
 nginx/logs/
 nginx/*.log
+nginx/access.log
+nginx/error.log
 
-# SSL certificates (keep examples)
+# SSL certificates (production only)
 nginx/ssl/*.pem
 nginx/ssl/*.key
 nginx/ssl/*.crt
+nginx/ssl/cert.pem
+nginx/ssl/privkey.pem
+
+# Keep SSL directory structure and examples
 !nginx/ssl/.gitkeep
 !nginx/ssl/README.md
+!nginx/ssl/example.crt
+
+# Nginx cache
+nginx/cache/
+nginx/temp/
+
+# ============================================================
+# LIVEKIT (Voice Chat Server)
+# ============================================================
+
+# LiveKit data
+livekit/data/
+livekit/logs/
+
+# LiveKit config with secrets
+livekit/config.local.yaml
+
+# Keep example config
+!livekit/config.yaml
 
 # ============================================================
 # NODE & NPM
@@ -291,10 +323,9 @@ nginx/ssl/*.crt
 # Dependencies
 node_modules/
 frontend/node_modules/
-cli-tool/node_modules/
 jspm_packages/
 
-# npm
+# npm logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -314,17 +345,19 @@ lerna-debug.log*
 .yarn/install-state.gz
 
 # pnpm
-pnpm-lock.yaml
 .pnpm-store/
 
-# Optional npm cache directory
+# Optional npm cache
 .npm
 
-# Optional eslint cache
+# Optional ESLint cache
 .eslintcache
 
-# Optional stylelint cache
+# Optional Stylelint cache
 .stylelintcache
+
+# Turbo
+.turbo/
 
 # ============================================================
 # IDE & EDITORS
@@ -339,7 +372,7 @@ pnpm-lock.yaml
 *.code-workspace
 .history/
 
-# JetBrains (PyCharm, WebStorm, IntelliJ)
+# JetBrains (PyCharm, WebStorm, IntelliJ IDEA)
 .idea/
 *.iml
 *.iws
@@ -406,15 +439,21 @@ $RECYCLE.BIN/
 # LOGS & TEMPORARY FILES
 # ============================================================
 
-# Logs
+# Application logs
 logs/
 *.log
 log/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+application.log
+error.log
+debug.log
+
+# FastAPI/Uvicorn logs
+backend/echoframe_api/logs/
+backend/echoframe_api/*.log
+
+# Socket.io logs
+socket-debug.log
+socketio.log
 
 # Runtime data
 pids/
@@ -427,7 +466,6 @@ tmp/
 temp/
 *.tmp
 *.temp
-.cache/
 
 # ============================================================
 # TESTING
@@ -443,22 +481,28 @@ htmlcov/
 # Test databases
 test.db
 test.sqlite
+test.sql
 
 # Test uploads
 test-uploads/
 test-videos/
+test-storage/
+
+# Test results
+test-results/
+pytest-results/
 
 # ============================================================
 # CI/CD
 # ============================================================
 
-# GitHub Actions
+# GitHub Actions secrets
 .github/workflows/secrets.yml
 
-# CircleCI
+# CircleCI local
 .circleci/config.local.yml
 
-# GitLab CI
+# GitLab CI local
 .gitlab-ci.local.yml
 
 # ============================================================
@@ -474,6 +518,16 @@ _site/
 # MkDocs
 mkdocs/site/
 
+# Sphinx
+docs/_build/
+
+# Keep documentation assets
+!docs/images/
+!docs/diagrams/
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.svg
+
 # ============================================================
 # MONITORING & ANALYTICS
 # ============================================================
@@ -484,6 +538,68 @@ mkdocs/site/
 # NewRelic
 newrelic.ini
 
+# Analytics data (raw logs)
+analytics-data/
+analytics-logs/
+
+# ============================================================
+# ECHO FRAME SPECIFIC
+# ============================================================
+
+# Room data (development only)
+room-data/
+dev-rooms/
+
+# Development uploads
+dev-uploads/
+dev-storage/
+dev-videos/
+
+# Sample/test media files
+sample-videos/
+test-*.mp4
+test-*.m3u8
+demo-video.*
+
+# Local configuration overrides
+local.config.js
+local.config.json
+config.local.yaml
+
+# Performance profiling
+*.trace
+*.cpuprofile
+*.heapsnapshot
+*.prof
+
+# User session data (development)
+sessions/
+dev-sessions/
+
+# Fingerprint testing data
+fingerprint-test-data/
+
+# Rate limit testing
+rate-limit-test/
+
+# WebRTC TURN server logs (if self-hosted)
+turn-server.log
+coturn.log
+
+# ============================================================
+# PYTHON PACKAGE MANAGERS
+# ============================================================
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# PDM
+__pypackages__/
+.pdm.toml
+
 # ============================================================
 # MISCELLANEOUS
 # ============================================================
@@ -492,6 +608,7 @@ newrelic.ini
 *.bak
 *.backup
 *.old
+*.orig
 
 # Archives
 *.zip
@@ -500,15 +617,17 @@ newrelic.ini
 *.tgz
 *.rar
 *.7z
+*.gz
 
-# Lock files (keep package-lock.json and requirements.txt)
+# Lock files - KEEP package-lock.json and requirements.txt
 !package-lock.json
-!frontend/package-lock.json
+!frontend/echo-frame-front/package-lock.json
 !requirements.txt
-!backend/requirements.txt
+!backend/echoframe_api/requirements.txt
+!backend/echoframe_api/requirements-dev.txt
 !cli-tool/requirements.txt
 
-# Minified files
+# Minified files (generated)
 *.min.js
 *.min.css
 
@@ -517,20 +636,10 @@ newrelic.ini
 
 # FFmpeg temporary files
 ffmpeg_*
+ffmpeg-temp/
 *.ffmpeg
 
-# WebRTC/Socket.io debug
-socket-debug.log
-
-# MinIO data (if running locally)
-minio-data/
-.minio.sys/
-
-# Localization
-*.mo
-*.pot
-
-# Compiled source
+# Compiled binaries
 *.com
 *.class
 *.dll
@@ -538,47 +647,15 @@ minio-data/
 *.o
 *.so
 
-# Package manager directories
+# Package managers
 bower_components/
 
-# Sass
+# Sass cache
 .sass-cache/
 
-# TypeScript
-*.tsbuildinfo
-frontend/.tsbuildinfo
-frontend/next-env.d.ts
-
-# Turbo
-.turbo/
-
-# Sentry
-.sentryclirc
-
-# ============================================================
-# PROJECT SPECIFIC
-# ============================================================
-
-# Room data (if stored locally for dev)
-room-data/
-
-# User uploads during development
-dev-uploads/
-dev-storage/
-
-# Local test files
-test-*.mp4
-test-*.m3u8
-sample-videos/
-
-# Local configuration overrides
-local.config.js
-local.config.json
-
-# Performance monitoring
-*.trace
-*.cpuprofile
-*.heapsnapshot
+# Localization compiled files
+*.mo
+*.pot
 
 # ============================================================
 # KEEP THESE FILES (Important!)
@@ -586,18 +663,55 @@ local.config.json
 
 # Keep example/template files
 !.env.example
-!.env.local.example
+!frontend/echo-frame-front/.env.local.example
+!backend/echoframe_api/.env.example
 !docker-compose.example.yml
 !config.example.json
+!config.example.yaml
 
-# Keep documentation images
-!docs/images/**
+# Keep documentation assets
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.svg
+!docs/**/*.gif
 !README_assets/**
+!.github/assets/**
 
-# Keep gitkeep files for empty directories
+# Keep public frontend assets
+!frontend/echo-frame-front/public/**/*.jpg
+!frontend/echo-frame-front/public/**/*.jpeg
+!frontend/echo-frame-front/public/**/*.png
+!frontend/echo-frame-front/public/**/*.gif
+!frontend/echo-frame-front/public/**/*.svg
+!frontend/echo-frame-front/public/**/*.ico
+!frontend/echo-frame-front/public/**/*.webp
+
+# Keep gitkeep for empty directories
 !**/.gitkeep
 
-# Keep CI/CD templates
+# Keep CI/CD workflow files
 !.github/workflows/*.yml
+!.github/workflows/*.yaml
 !.gitlab-ci.yml
 !.circleci/config.yml
+
+# Keep docker-compose and Dockerfiles
+!docker-compose.yml
+!**/Dockerfile
+!**/.dockerignore
+
+# Keep Nginx config
+!nginx/nginx.conf
+!nginx/Dockerfile
+
+# Keep LiveKit config template
+!livekit/config.yaml
+
+# Keep Alembic config
+!backend/echoframe_api/alembic.ini
+!backend/echoframe_api/alembic/env.py
+!backend/echoframe_api/alembic/script.py.mako
+
+# ============================================================
+# END OF .gitignore
+# ============================================================

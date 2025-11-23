@@ -47,7 +47,7 @@ export default function BentoGrid() {
     },
     {
       id: 6,
-      title: "Up to 20 Users",
+      title: "Up to 100 Users",
       description: "Watch together with friends and family",
       icon: Users,
       gradient: "from-accent/20 to-accent/5",
@@ -287,7 +287,7 @@ export default function BentoGrid() {
                     </motion.div>
                   ))}
                 </div>
-                <span className="text-sm text-muted-foreground ml-2">+15 more</span>
+                <span className="text-sm text-muted-foreground ml-2">+195 more</span>
             </div>
           </div>
         </div>

@@ -20,10 +20,10 @@ const GlassmorphicNavbar = () => {
   }, [isDark]);
 
   const navLinks = [
-    { name: 'Home', icon: Home, href: '#home' },
-    { name: 'Learn', icon: BookOpen, href: '#learn' },
-    { name: 'Admin', icon: Shield, href: '#admin' },
-    { name: 'Room', icon: DoorOpen, href: '#room' },
+    { name: 'Home', icon: Home, href: '/home' },
+    { name: 'Learn', icon: BookOpen, href: '/learn' },
+    { name: 'Admin', icon: Shield, href: '/admin' },
+    { name: 'Room', icon: DoorOpen, href: '/room' },
   ];
 
   const glassStyle = `backdrop-blur-xl bg-background/30 border border-border/40 shadow-lg`;
@@ -105,7 +105,7 @@ const GlassmorphicNavbar = () => {
               variants={islandVariants}
               className={`${glassStyle} rounded-2xl px-6 py-4 group hover:bg-background/40 transition-all duration-300 cursor-pointer`}
             >
-              <h1 className='text-2xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-text'>EchoFrame</h1>
+              <a className='text-2xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-text'>EchoFrame</a>
             </motion.div>
             {/* <div className="flex items-center gap-3 group cursor-pointer">
                           <div className="relative">
@@ -416,7 +416,7 @@ const GlassmorphicNavbar = () => {
                   className="mt-6 pt-6 border-t border-border/40"
                 >
                   <motion.a
-                    href="https://github.com"
+                    href="https://github.com/parhamf6/Echo-Frame"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 px-4 py-4 rounded-xl hover:bg-primary/10 transition-colors group"
