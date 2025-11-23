@@ -1,16 +1,49 @@
 services:
+  # PostgreSQL Database
   postgres:
-    image: postgres:15
-    container_name: echoframe_postgres
-    restart: always
+    image: postgres:15-alpine
+    container_name: echoframe-postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: echouser
-      POSTGRES_PASSWORD: echopass
-      POSTGRES_DB: echoframe
+      POSTGRES_USER: echoframe_user
+      POSTGRES_PASSWORD: echoframe_password_change_this
+      POSTGRES_DB: echoframe_db
     ports:
-      - "5432:5432"  # map host port 5432 to container
+      - "5432:5432"
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - echoframe-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U echoframe_user -d echoframe_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: echoframe-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - echoframe-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
 
 volumes:
-  db-data:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  echoframe-network:
+    driver: bridge
