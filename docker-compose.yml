@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: echoframe_user
-      POSTGRES_PASSWORD: echoframe_database_pass
+      POSTGRES_PASSWORD: echoframe_password_change_this
       POSTGRES_DB: echoframe_db
     ports:
       - "5432:5432"
