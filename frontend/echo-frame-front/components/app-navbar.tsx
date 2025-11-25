@@ -2,14 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Moon, Sun, Github, Menu, X, Home, BookOpen, Shield, DoorOpen , LogIn } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { Moon, Sun, Github, Menu, X, Home, BookOpen, Shield, DoorOpen, LogIn } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
 import { ThemeToggleSlider } from './theme-toggle';
 
 const GlassmorphicNavbar = () => {
   const [isDark, setIsDark] = useState(true);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeLink, setActiveLink] = useState('Home');
+  const pathname = usePathname();
 
   useEffect(() => {
     if (isDark) {
@@ -20,11 +21,30 @@ const GlassmorphicNavbar = () => {
   }, [isDark]);
 
   const navLinks = [
-    { name: 'Home', icon: Home, href: '/home' },
+    { name: 'Home', icon: Home, href: '/' },
     { name: 'Learn', icon: BookOpen, href: '/learn' },
-    { name: 'Admin', icon: Shield, href: '/admin/dashboard' },
+    { name: 'Admin', icon: Shield, href: '/admin' },
     { name: 'Room', icon: DoorOpen, href: '/room' },
   ];
+
+  // Function to determine active link based on current pathname
+  const getActiveLink = () => {
+    // Check if pathname exactly matches any href
+    const exactMatch = navLinks.find(link => link.href === pathname);
+    if (exactMatch) return exactMatch.name;
+    
+    // Check if pathname starts with any href (for nested routes)
+    for (const link of navLinks) {
+      if (pathname.startsWith(link.href) && link.href !== '/') {
+        return link.name;
+      }
+    }
+    
+    // Default to home if no match
+    return 'Home';
+  };
+
+  const activeLink = getActiveLink();
 
   const glassStyle = `backdrop-blur-xl bg-background/30 border border-border/40 shadow-lg`;
   
@@ -107,22 +127,7 @@ const GlassmorphicNavbar = () => {
             >
               <a className='text-2xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-text'>EchoFrame</a>
             </motion.div>
-            {/* <div className="flex items-center gap-3 group cursor-pointer">
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full group-hover:bg-primary/30 transition-all duration-300" />
-                            <div className="relative bg-primary/10 p-2.5 rounded-xl border border-primary/20 backdrop-blur-sm group-hover:scale-110 transition-transform duration-300">
-                              <Play className="w-6 h-6 text-primary fill-primary" />
-                            </div>
-                          </div>
-                          <div>
-                            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-text">
-                              Echo Room
-                            </h1>
-                            <p className="text-xs text-muted-foreground">Watch Together, Anywhere</p>
-                          </div>
-                        </div> */}
             
-
             {/* Center Island - Navigation Links */}
             <motion.div
               custom={1}
@@ -137,7 +142,6 @@ const GlassmorphicNavbar = () => {
                   <motion.a
                     key={link.name}
                     href={link.href}
-                    onClick={() => setActiveLink(link.name)}
                     className="relative px-5 py-3 rounded-xl text-foreground/80 hover:text-foreground transition-colors duration-200 flex items-center gap-2 group overflow-hidden"
                     initial="initial"
                     whileHover="hover"
@@ -193,41 +197,6 @@ const GlassmorphicNavbar = () => {
               variants={islandVariants}
               className={`${glassStyle} rounded-2xl px-2 py-2 flex items-center gap-2`}
             >
-              {/* <motion.button
-                onClick={() => setIsDark(!isDark)}
-                className="relative p-3 rounded-xl hover:bg-accent/20 transition-colors duration-200 overflow-hidden group"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                <motion.div
-                  className="absolute inset-0 bg-gradient-to-r from-primary/20 to-accent/20 rounded-xl opacity-0 group-hover:opacity-100"
-                  transition={{ duration: 0.3 }}
-                />
-                <AnimatePresence mode="wait">
-                  {isDark ? (
-                    <motion.div
-                      key="moon"
-                      initial={{ rotate: -90, scale: 0, opacity: 0 }}
-                      animate={{ rotate: 0, scale: 1, opacity: 1 }}
-                      exit={{ rotate: 90, scale: 0, opacity: 0 }}
-                      transition={{ duration: 0.3, ease: "easeInOut" }}
-                    >
-                      <Moon className="w-5 h-5 text-foreground relative z-10" />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="sun"
-                      initial={{ rotate: 90, scale: 0, opacity: 0 }}
-                      animate={{ rotate: 0, scale: 1, opacity: 1 }}
-                      exit={{ rotate: -90, scale: 0, opacity: 0 }}
-                      transition={{ duration: 0.3, ease: "easeInOut" }}
-                    >
-                      <Sun className="w-5 h-5 text-foreground relative z-10" />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.button> */}
-              {/* <ThemeToggle /> */}
               <ThemeToggleSlider />
 
               <motion.a
@@ -269,7 +238,7 @@ const GlassmorphicNavbar = () => {
               ease: 'linear',
             }}
           >
-            ProjectName
+            EchoFrame
           </motion.h1>
 
           <div className="flex items-center gap-2">
@@ -365,7 +334,6 @@ const GlassmorphicNavbar = () => {
                       variants={menuItemVariants}
                       href={link.href}
                       onClick={() => {
-                        setActiveLink(link.name);
                         setIsMenuOpen(false);
                       }}
                       className={`flex items-center gap-3 px-4 py-4 rounded-xl transition-colors group relative overflow-hidden ${

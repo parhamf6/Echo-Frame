@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ThemeToggleSlider } from '@/components/theme-toggle';
+
 const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Playlist', href: '/admin/dashboard/playlist', icon: ListVideo },
@@ -55,27 +56,30 @@ export default function DashboardLayout({
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-card border-r border-border transform transition-transform duration-200 ease-in-out lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform duration-200 ease-in-out lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-border">
+          <div className="flex items-center justify-between h-16 px-6 border-b border-sidebar-border">
             <Link href="/admin/dashboard" className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
                 <Play className="w-4 h-4 text-primary-foreground" fill="currentColor" />
               </div>
-              <span className="text-lg font-bold">EchoFrame</span>
+              <span className="text-lg font-bold text-sidebar-foreground">EchoFrame</span>
             </Link>
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:outline-none focus:ring-2 focus:ring-sidebar-ring"
               onClick={() => setSidebarOpen(false)}
             >
               <X className="w-5 h-5" />
             </Button>
+            <div>
+              <ThemeToggleSlider/>
+            </div>
           </div>
 
           {/* Navigation */}
@@ -87,10 +91,10 @@ export default function DashboardLayout({
                     key={item.name}
                     href={item.href}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+                      'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-sidebar-ring',
                       isActive
-                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-sidebar-primary/20'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                     )}
                     onClick={() => setSidebarOpen(false)}
                   >
@@ -103,21 +107,18 @@ export default function DashboardLayout({
           </nav>
 
           {/* User info & logout */}
-          <div className="p-4 border-t border-border space-y-3">
-            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/50 shadow-2xl border border-chart-1">
+          <div className="p-4 border-t border-sidebar-border space-y-3">
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-surface-2 shadow-2xl">
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <User className="w-4 h-4 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{admin?.username}</p>
+                <p className="text-sm font-medium truncate text-surface-2-foreground">{admin?.username}</p>
                 <p className="text-xs text-muted-foreground">Administrator</p>
-              </div>
-              <div>
-                <ThemeToggleSlider/>
               </div>
             </div>
             <Button
-              className="w-full justify-start gap-2 shadow-2xl border border-chart-1 bg-card text-destructive hover:text-foreground hover:bg-destructive"
+              className="w-full justify-start gap-2 bg-surface-2 text-destructive hover:text-destructive-foreground hover:bg-destructive shadow-sm focus:outline-none focus:ring-2 focus:ring-sidebar-ring shadow-2xl"
               onClick={handleLogout}
             >
               <LogOut className="w-4 h-4" />
@@ -145,7 +146,9 @@ export default function DashboardLayout({
               </div>
               <span className="font-bold">EchoFrame</span>
             </div>
-            <div className="w-10" /> {/* Spacer for centering */}
+            <div>
+              <ThemeToggleSlider/>
+            </div>
           </div>
         </header>
 
