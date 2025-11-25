@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60  # 🔒 PRODUCTION: Adjust based on traffic
+    # Guest rate limiting (defaults used for anonymous guest actions)
+    GUEST_RATE_LIMIT_PER_HOUR: int = 3
+    GUEST_RATE_PERIOD_SECONDS: int = 3600
+    RATE_LIMIT_KEY_PREFIX: str = "rl"
     
     # File Upload Settings
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024 * 1024  # 10GB
@@ -52,6 +56,10 @@ class Settings(BaseSettings):
     STORAGE_PATH: str = "storage"
     VIDEO_STORAGE_PATH: str = "storage/videos"
     SUBTITLE_STORAGE_PATH: str = "storage/subtitles"
+
+    # Cookie settings
+    REFRESH_COOKIE_NAME: str = "refresh_token"
+    REFRESH_COOKIE_SAMESITE: str = "lax"  # one of 'lax', 'strict', 'none'
     
     class Config:
         env_file = ".env"

@@ -1,5 +1,6 @@
 from fastapi import FastAPI,Depends
 from app.core.config import settings
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, async_engine
 from app.core.redis_client import redis_client
@@ -8,6 +9,17 @@ from app.core.database import init_db, close_db
 
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,  # Critical for HTTP-only cookies
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")

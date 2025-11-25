@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.auth import AdminLogin, TokenResponse, RefreshResponse
-from app.api.deps import get_db_session, get_redis, get_current_admin
+from app.api.deps import get_db_session, get_redis, get_current_admin, rate_limit_dependency
 from app.services import auth_service
 from app.core import security
 from app.core.config import settings
 from app.core.redis_client import RedisClient
 from typing import Optional
 from app.models.admin import Admin
+from app.utils.cookies import set_refresh_cookie, clear_refresh_cookie
 
 router = APIRouter()
 
@@ -17,7 +18,13 @@ def _access_expires_seconds() -> int:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: AdminLogin, response: Response, db: AsyncSession = Depends(get_db_session), redis: RedisClient = Depends(get_redis)):
+async def login(
+    payload: AdminLogin,
+    response: Response,
+    db: AsyncSession = Depends(get_db_session),
+    redis: RedisClient = Depends(get_redis),
+    _rate_limit=Depends(rate_limit_dependency),
+):
     admin = await auth_service.authenticate_admin(db, payload.username, payload.password)
     if not admin:
         raise HTTPException(status_code=401, detail="Invalid username or password")
@@ -28,19 +35,8 @@ async def login(payload: AdminLogin, response: Response, db: AsyncSession = Depe
     # Create refresh token and store jti in redis
     refresh_token = await auth_service.create_and_store_refresh(redis, str(admin.id))
 
-    # Set refresh token as secure HttpOnly cookie
-    refresh_ttl = int(settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600)
-    secure_flag = not settings.DEBUG
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=secure_flag,
-        samesite="lax",
-        path="/",
-        max_age=refresh_ttl,
-        expires=refresh_ttl,
-    )
+    # Set refresh token cookie using centralized helper
+    set_refresh_cookie(response, refresh_token)
 
     return TokenResponse(access_token=access_token, expires_in=_access_expires_seconds())
 
@@ -68,19 +64,8 @@ async def refresh(request: Request, response: Response, redis: RedisClient = Dep
     await auth_service.revoke_refresh(redis, admin_id, jti)
     new_refresh = await auth_service.create_and_store_refresh(redis, admin_id)
 
-    # Set new cookie
-    refresh_ttl = int(settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600)
-    secure_flag = not settings.DEBUG
-    response.set_cookie(
-        key="refresh_token",
-        value=new_refresh,
-        httponly=True,
-        secure=secure_flag,
-        samesite="lax",
-        path="/",
-        max_age=refresh_ttl,
-        expires=refresh_ttl,
-    )
+    # Set new cookie using centralized helper
+    set_refresh_cookie(response, new_refresh)
 
     # Issue new access token
     access_token = security.create_access_token({"sub": admin_id})
@@ -98,8 +83,8 @@ async def logout(request: Request, response: Response, redis: RedisClient = Depe
             if admin_id and jti:
                 await auth_service.revoke_refresh(redis, admin_id, jti)
 
-    # Clear cookie
-    response.delete_cookie("refresh_token", path="/")
+    # Clear cookie using helper
+    clear_refresh_cookie(response)
     return {"detail": "Logged out"}
 
 

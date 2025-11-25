@@ -22,7 +22,7 @@ const GlassmorphicNavbar = () => {
   const navLinks = [
     { name: 'Home', icon: Home, href: '/home' },
     { name: 'Learn', icon: BookOpen, href: '/learn' },
-    { name: 'Admin', icon: Shield, href: '/admin' },
+    { name: 'Admin', icon: Shield, href: '/admin/dashboard' },
     { name: 'Room', icon: DoorOpen, href: '/room' },
   ];
 
