@@ -1,0 +1,34 @@
+from pydantic import BaseModel, Field
+from typing import Optional
+
+
+class GuestJoinRequest(BaseModel):
+    room_id: str = Field(..., description="UUID of the room to join")
+    username: str = Field(..., min_length=2, max_length=50)
+    fingerprint: str = Field(..., min_length=8, max_length=255)
+
+
+class GuestResponse(BaseModel):
+    id: str
+    room_id: str
+    username: str
+    join_status: str
+    role: str
+    kicked: bool
+    created_at: Optional[str]
+
+
+class GuestJoinResponse(BaseModel):
+    guest_id: str
+    session_token: str
+    note: Optional[str]
+
+
+class PermissionUpdate(BaseModel):
+    can_chat: Optional[bool]
+    can_voice: Optional[bool]
+
+
+class PermissionResponse(BaseModel):
+    guest_id: str
+    permissions: dict

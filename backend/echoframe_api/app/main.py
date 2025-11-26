@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, async_engine
 from app.core.redis_client import redis_client
 from app.api.v1 import auth as auth_router
+from app.api.v1 import room as room_router
 from app.core.database import init_db, close_db
 
 
@@ -37,6 +38,9 @@ async def shutdown():
 
 
 app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(room_router.router, prefix="/api/v1/room", tags=["room"])
+from app.api.v1 import guests as guests_router
+app.include_router(guests_router.router, prefix="/api/v1/guests", tags=["guests"])
 
 
 @app.get("/")
