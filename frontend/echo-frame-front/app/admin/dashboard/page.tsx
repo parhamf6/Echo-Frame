@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/stores/auth-store';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, Video, TrendingUp, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RoomQuickActions } from '@/features/admin/dashboard/room-quick-action-card';
 
 export default function DashboardPage() {
   const { admin } = useAuthStore();
@@ -42,33 +43,7 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
-
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
-          <CardDescription>Get started with common tasks</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="border-dashed">
-              <CardContent className="pt-6 text-center">
-                <p className="text-sm text-muted-foreground">Create your first room</p>
-              </CardContent>
-            </Card>
-            <Card className="border-dashed">
-              <CardContent className="pt-6 text-center">
-                <p className="text-sm text-muted-foreground">Upload a video</p>
-              </CardContent>
-            </Card>
-            <Card className="border-dashed">
-              <CardContent className="pt-6 text-center">
-                <p className="text-sm text-muted-foreground">Manage playlists</p>
-              </CardContent>
-            </Card>
-          </div>
-        </CardContent>
-      </Card>
+      <RoomQuickActions/>
     </div>
   );
 }

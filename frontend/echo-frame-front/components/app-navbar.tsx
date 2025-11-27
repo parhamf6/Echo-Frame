@@ -125,7 +125,7 @@ const GlassmorphicNavbar = () => {
               variants={islandVariants}
               className={`${glassStyle} rounded-2xl px-6 py-4 group hover:bg-background/40 transition-all duration-300 cursor-pointer`}
             >
-              <a className='text-2xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent animate-gradient-text'>EchoFrame</a>
+              <a className='text-2xl font-bold bg-primary bg-clip-text text-transparent animate-gradient-text'>EchoFrame</a>
             </motion.div>
             
             {/* Center Island - Navigation Links */}
@@ -150,13 +150,13 @@ const GlassmorphicNavbar = () => {
                     {isActive && (
                       <motion.div
                         layoutId="activeTab"
-                        className="absolute inset-0 bg-gradient-to-r from-primary/20 via-accent/20 to-primary/20 rounded-xl"
+                        className="absolute inset-0 bg-primary/20 rounded-xl"
                         transition={{ type: "spring", stiffness: 500, damping: 30 }}
                       />
                     )}
                     
                     <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 rounded-xl opacity-0 group-hover:opacity-100"
+                      className="absolute inset-0 bg-primary/10 rounded-xl opacity-0 group-hover:opacity-100"
                       transition={{ duration: 0.3 }}
                     />
                     

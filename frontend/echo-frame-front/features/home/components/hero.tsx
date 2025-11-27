@@ -159,11 +159,11 @@ export default function Hero() {
           transition={{ duration: 1 }}
           className={`transition-all duration-1000 delay-800 mt-10`}
         >
-          <div className="relative overflow-hidden rounded-3xl shadow-2xl border border-chart-2">
+          <div className="relative overflow-hidden rounded-3xl shadow-2xl border">
             {/* <div className="absolute inset-0 -z-10 h-full w-full items-center px-5 py-24 [background:radial-gradient(125%_125%_at_50%_10%,#000_40%,#63e_100%)]"></div> */}
             <AnimatedGradient 
               variant="mesh" 
-              colors={['accent-2']} 
+              colors={['accent']} 
               speed="normal" 
             />
             <div className="relative p-12 text-center z-10">
