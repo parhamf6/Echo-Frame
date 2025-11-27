@@ -12,7 +12,7 @@ export default function AdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, checkAuth, isLoading } = useAuthStore();
+  const { isAuthenticated, checkAuth, isLoading, stopAutoRefresh } = useAuthStore();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -22,6 +22,11 @@ export default function AdminLayout({
     };
 
     verifyAuth();
+
+    // Cleanup: stop auto-refresh when component unmounts
+    return () => {
+      // Don't stop refresh on unmount, only on logout
+    };
   }, [checkAuth]);
 
   useEffect(() => {
