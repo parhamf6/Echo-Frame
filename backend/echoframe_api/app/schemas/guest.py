@@ -32,3 +32,11 @@ class PermissionUpdate(BaseModel):
 class PermissionResponse(BaseModel):
     guest_id: str
     permissions: dict
+
+
+class GuestStatusResponse(BaseModel):
+    guest_id: str
+    join_status: str
+    kicked: bool
+    role: str
+    permissions: dict

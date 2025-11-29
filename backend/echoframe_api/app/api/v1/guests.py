@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.schemas.guest import GuestJoinRequest, GuestJoinResponse, GuestResponse
+from app.schemas.guest import GuestJoinRequest, GuestJoinResponse, GuestResponse, GuestStatusResponse
 from app.api.deps import get_db_session, get_redis, get_current_admin
 from app.services import guest_service
 from app.utils.ip import extract_client_ip
@@ -115,6 +115,26 @@ async def kick_guest(guest_id: str, admin=Depends(get_current_admin), db: AsyncS
         raise HTTPException(status_code=404, detail="Guest not found")
 
     return {"detail": "Guest kicked and banned until room end"}
+
+
+@router.get("/{guest_id}", response_model=GuestStatusResponse)
+async def get_guest_status(guest_id: str, db: AsyncSession = Depends(get_db_session)):
+    """Get minimal guest status for polling by the frontend.
+
+    Returns the guest's `join_status`, `kicked`, `role`, and `permissions`.
+    """
+    result = await db.execute(select(Guest).where(Guest.id == guest_id))
+    guest = result.scalar_one_or_none()
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    return GuestStatusResponse(
+        guest_id=str(guest.id),
+        join_status=guest.join_status.value,
+        kicked=guest.kicked,
+        role=guest.role.value,
+        permissions=guest.permissions_json,
+    )
 
 
 @router.post("/session/refresh")
