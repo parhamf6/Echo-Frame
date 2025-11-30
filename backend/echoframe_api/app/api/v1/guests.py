@@ -2,13 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.schemas.guest import GuestJoinRequest, GuestJoinResponse, GuestResponse, GuestStatusResponse
-from app.api.deps import get_db_session, get_redis, get_current_admin
+from app.api.deps import get_db_session, get_redis, get_current_admin, get_current_user, require_moderator_or_admin,require_admin_only
 from app.services import guest_service
 from app.utils.ip import extract_client_ip
 from app.core.redis_client import RedisClient
 from app.schemas.guest import PermissionUpdate, PermissionResponse
 from app.models.guest import Guest, JoinStatus
 from typing import List, Optional
+from app.core.socketio_manager import (
+    emit_permission_changed,
+    emit_user_kicked,
+    emit_user_list_updated,
+    emit_join_request
+)
 
 router = APIRouter()
 
@@ -43,55 +49,6 @@ async def join_guest(request: Request, payload: GuestJoinRequest, db: AsyncSessi
     return GuestJoinResponse(guest_id=res["guest_id"], session_token=res["session_token"], note="pending approval")
 
 
-@router.patch("/{guest_id}/accept", response_model=GuestResponse)
-async def accept_guest(guest_id: str, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session)):
-    guest = await guest_service.accept_guest(db, guest_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-
-    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
-
-
-@router.patch("/{guest_id}/reject", response_model=GuestResponse)
-async def reject_guest(guest_id: str, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session)):
-    guest = await guest_service.reject_guest(db, guest_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-
-    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
-
-
-@router.patch("/{guest_id}/permissions", response_model=PermissionResponse)
-async def update_permissions(guest_id: str, payload: PermissionUpdate, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session)):
-    """Update guest permissions (admin/moderator).
-
-    Frontend usage: PATCH with JSON body `{ "can_chat": true, "can_voice": false }`.
-    Best practice: UI should reflect permission changes in real-time (WebSocket events).
-    """
-    perms = {k: v for k, v in payload.dict().items() if v is not None}
-    if not perms:
-        raise HTTPException(status_code=400, detail="No permissions provided")
-
-    guest = await guest_service.update_permissions(db, guest_id, perms)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-
-    return PermissionResponse(guest_id=str(guest.id), permissions=guest.permissions_json)
-
-
-@router.patch("/{guest_id}/promote", response_model=GuestResponse)
-async def promote_guest(guest_id: str, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session)):
-    """Promote guest to moderator (admin only).
-
-    Frontend: call when admin clicks "Promote". Consider notifying the promoted user via socket.
-    """
-    guest = await guest_service.promote_guest(db, guest_id)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-
-    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
-
-
 @router.get("/pending", response_model=List[GuestResponse])
 async def list_pending_guests(room_id: Optional[str] = None, limit: int = 50, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session)):
     """List pending guest join requests (admin only).
@@ -104,37 +61,52 @@ async def list_pending_guests(room_id: Optional[str] = None, limit: int = 50, ad
     return [GuestResponse(id=str(g.id), room_id=str(g.room_id), username=g.username, join_status=g.join_status.value, role=g.role.value, kicked=g.kicked, created_at=str(g.created_at)) for g in guests]
 
 
-@router.delete("/{guest_id}")
-async def kick_guest(guest_id: str, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session), redis: RedisClient = Depends(get_redis)):
-    """Kick a guest (admin/moderator).
-
-    This will set `kicked=true` and ban the guest's IP and fingerprint until the room ends.
+@router.get("/list", response_model=List[GuestResponse])
+async def list_guests(
+    room_id: Optional[str] = None,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """List all active guests in a room (accepted, not kicked).
+    
+    Public endpoint - no auth required so viewers can see the list.
+    Frontend will handle UI permissions (disable buttons for viewers).
+    
+    Query params:
+    - room_id: filter by room UUID
+    - limit: maximum rows to return (default 50)
     """
-    guest = await guest_service.kick_guest(db, guest_id, redis)
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-
-    return {"detail": "Guest kicked and banned until room end"}
-
-
-@router.get("/{guest_id}", response_model=GuestStatusResponse)
-async def get_guest_status(guest_id: str, db: AsyncSession = Depends(get_db_session)):
-    """Get minimal guest status for polling by the frontend.
-
-    Returns the guest's `join_status`, `kicked`, `role`, and `permissions`.
-    """
-    result = await db.execute(select(Guest).where(Guest.id == guest_id))
-    guest = result.scalar_one_or_none()
-    if not guest:
-        raise HTTPException(status_code=404, detail="Guest not found")
-
-    return GuestStatusResponse(
-        guest_id=str(guest.id),
-        join_status=guest.join_status.value,
-        kicked=guest.kicked,
-        role=guest.role.value,
-        permissions=guest.permissions_json,
+    if not room_id:
+        raise HTTPException(status_code=400, detail="room_id is required")
+    
+    from uuid import UUID as PYUUID
+    try:
+        room_uuid = PYUUID(room_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid room_id format")
+    
+    result = await db.execute(
+        select(Guest).where(
+            Guest.room_id == room_uuid,
+            Guest.join_status == JoinStatus.ACCEPTED,
+            Guest.kicked == False
+        ).order_by(Guest.created_at)
     )
+    guests = result.scalars().all()
+    
+    return [
+        GuestResponse(
+            id=str(g.id),
+            room_id=str(g.room_id),
+            username=g.username,
+            join_status=g.join_status.value,
+            role=g.role.value,
+            kicked=g.kicked,
+            created_at=str(g.created_at),
+            permissions=g.permissions_json  # ✅ Include permissions
+        )
+        for g in guests
+    ]
 
 
 @router.post("/session/refresh")
@@ -173,3 +145,89 @@ async def refresh_session(payload: dict, db: AsyncSession = Depends(get_db_sessi
     # refresh TTL
     await redis.set(key, raw, expire=24 * 3600)
     return {"detail": "session refreshed"}
+
+
+@router.patch("/{guest_id}/accept", response_model=GuestResponse)
+async def accept_guest(guest_id: str, current_user=Depends(require_moderator_or_admin), db: AsyncSession = Depends(get_db_session)):
+    guest = await guest_service.accept_guest(db, guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    await emit_user_list_updated(str(guest.room_id))
+
+    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
+
+
+@router.patch("/{guest_id}/reject", response_model=GuestResponse)
+async def reject_guest(guest_id: str, admin=Depends(get_current_admin), db: AsyncSession = Depends(get_db_session)):
+    guest = await guest_service.reject_guest(db, guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
+
+
+@router.patch("/{guest_id}/permissions", response_model=PermissionResponse)
+async def update_permissions(guest_id: str, payload: PermissionUpdate, current_user=Depends(require_moderator_or_admin), db: AsyncSession = Depends(get_db_session)):
+    """Update guest permissions (admin/moderator).
+
+    Frontend usage: PATCH with JSON body `{ "can_chat": true, "can_voice": false }`.
+    Best practice: UI should reflect permission changes in real-time (WebSocket events).
+    """
+    perms = {k: v for k, v in payload.dict().items() if v is not None}
+    if not perms:
+        raise HTTPException(status_code=400, detail="No permissions provided")
+
+    guest = await guest_service.update_permissions(db, guest_id, perms)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    await emit_permission_changed(str(guest.room_id), guest_id, perms)
+
+    return PermissionResponse(guest_id=str(guest.id), permissions=guest.permissions_json)
+
+
+@router.patch("/{guest_id}/promote", response_model=GuestResponse)
+async def promote_guest(guest_id: str, admin=Depends(require_admin_only), db: AsyncSession = Depends(get_db_session)):
+    """Promote guest to moderator (admin only).
+
+    Frontend: call when admin clicks "Promote". Consider notifying the promoted user via socket.
+    """
+    guest = await guest_service.promote_guest(db, guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
+
+
+@router.delete("/{guest_id}")
+async def kick_guest(guest_id: str, current_user=Depends(require_moderator_or_admin), db: AsyncSession = Depends(get_db_session), redis: RedisClient = Depends(get_redis)):
+    """Kick a guest (admin/moderator).
+
+    This will set `kicked=true` and ban the guest's IP and fingerprint until the room ends.
+    """
+    guest = await guest_service.kick_guest(db, guest_id, redis)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    await emit_user_kicked(str(guest.room_id), guest_id)
+    await emit_user_list_updated(str(guest.room_id))
+
+    return {"detail": "Guest kicked and banned until room end"}
+
+
+@router.get("/{guest_id}", response_model=GuestStatusResponse)
+async def get_guest_status(guest_id: str, db: AsyncSession = Depends(get_db_session)):
+    """Get minimal guest status for polling by the frontend.
+
+    Returns the guest's `join_status`, `kicked`, `role`, and `permissions`.
+    """
+    result = await db.execute(select(Guest).where(Guest.id == guest_id))
+    guest = result.scalar_one_or_none()
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+
+    return GuestStatusResponse(
+        guest_id=str(guest.id),
+        join_status=guest.join_status.value,
+        kicked=guest.kicked,
+        role=guest.role.value,
+        permissions=guest.permissions_json,
+    )

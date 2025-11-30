@@ -1,18 +1,20 @@
 from typing import AsyncGenerator
 from app.core.database import get_db
 from app.core.redis_client import redis_client, RedisClient
-from fastapi import Depends, HTTPException, Request, Response
+from fastapi import Depends, HTTPException, Request, Response,Header
 from fastapi.security import OAuth2PasswordBearer
 from app.core import security
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.admin import Admin
-from typing import Optional
+from app.models.guest import Guest, GuestRole
+from typing import Optional, Union
 from app.services import rate_limit_service
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.utils.ip import extract_client_ip
 from app.services import ip_tracking_service
+
 
 
 async def get_db_session() -> AsyncGenerator:
@@ -96,3 +98,60 @@ async def guest_rate_limit(request: Request, response: Response, redis: RedisCli
         raise HTTPException(status_code=429, detail="Too many requests", headers={"Retry-After": str(retry_after)})
 
     return None
+
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db_session)
+) -> Union[Admin, Guest]:
+    """
+    Get current user (either Admin via Bearer token OR Guest via session token).
+    Returns Admin or Guest object.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Check if it's a Bearer token (admin)
+    if authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "")
+        payload = security.decode_token(token)
+        if payload and payload.get("type") == "access":
+            admin_id = payload.get("sub")
+            result = await db.execute(select(Admin).where(Admin.id == admin_id))
+            admin = result.scalar_one_or_none()
+            if admin:
+                return admin
+    
+    # Otherwise treat as guest session token
+    # (You can enhance this to check Redis session:{token})
+    result = await db.execute(select(Guest).where(Guest.session_token == authorization))
+    guest = result.scalar_one_or_none()
+    if guest and guest.join_status == JoinStatus.ACCEPTED and not guest.kicked:
+        return guest
+    
+    raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+async def require_moderator_or_admin(
+    current_user: Union[Admin, Guest] = Depends(get_current_user)
+) -> Union[Admin, Guest]:
+    """
+    Ensure user is either Admin OR Moderator.
+    """
+    if isinstance(current_user, Admin):
+        return current_user
+    
+    if isinstance(current_user, Guest) and current_user.role == GuestRole.MODERATOR:
+        return current_user
+    
+    raise HTTPException(status_code=403, detail="Moderator or Admin access required")
+
+
+async def require_admin_only(
+    current_user: Union[Admin, Guest] = Depends(get_current_user)
+) -> Admin:
+    """
+    Ensure user is Admin (not just moderator).
+    """
+    if not isinstance(current_user, Admin):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user

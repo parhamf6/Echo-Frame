@@ -8,6 +8,7 @@ class GuestJoinRequest(BaseModel):
     fingerprint: str = Field(..., min_length=8, max_length=255)
 
 
+
 class GuestResponse(BaseModel):
     id: str
     room_id: str
@@ -16,6 +17,7 @@ class GuestResponse(BaseModel):
     role: str
     kicked: bool
     created_at: Optional[str]
+    permissions: Optional[dict] = None  # ✅ ADD THIS LINE
 
 
 class GuestJoinResponse(BaseModel):

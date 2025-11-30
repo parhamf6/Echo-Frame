@@ -12,6 +12,8 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 import json
+from app.core.socketio_manager import sio
+import socketio
 
 # ============= LOGGING SETUP =============
 logging.basicConfig(
@@ -35,6 +37,26 @@ request_stats = {
 }
 
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
+
+# ============= CORS MIDDLEWARE (MUST BE BEFORE SOCKETIO) =============
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+)
+
+socket_app = socketio.ASGIApp(
+    socketio_server=sio,
+    other_asgi_app=app,
+    socketio_path='/socket.io'
+)
+# Update Uvicorn run command to use socket_app instead of app
+# In your run script: uvicorn app.main:socket_app --reload
 
 # ============= LOGGING MIDDLEWARE =============
 @app.middleware("http")
@@ -91,17 +113,6 @@ async def log_requests(request: Request, call_next):
         logger.error(f"   Error: {str(e)}")
         logger.error(f"   Time: {process_time:.4f}s")
         raise
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-)
 
 @app.on_event("startup")
 async def startup():

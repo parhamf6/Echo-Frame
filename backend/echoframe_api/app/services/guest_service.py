@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.redis_client import RedisClient
 from typing import Optional
 import secrets
+from app.core.socketio_manager import emit_join_request
 
 
 async def join_guest(db: AsyncSession, room_id: str, username: str, fingerprint: str, ip: str, redis: RedisClient) -> dict:
@@ -84,6 +85,11 @@ async def join_guest(db: AsyncSession, room_id: str, username: str, fingerprint:
     except Exception:
         # Non-fatal: continue
         pass
+    await emit_join_request(str(room.id), {
+        'guest_id': str(guest.id),
+        'username': username,
+        'created_at': str(guest.created_at)
+    })
 
     return {"guest_id": str(guest.id), "session_token": session_token}
 
@@ -214,3 +220,8 @@ async def get_pending_guests(db: AsyncSession, room_id: Optional[str] = None, li
     result = await db.execute(q)
     rows = result.scalars().all()
     return rows
+
+async def get_guest_by_id(db: AsyncSession, guest_id: str) -> Optional[Guest]:
+    """Get guest by ID."""
+    result = await db.execute(select(Guest).where(Guest.id == guest_id))
+    return result.scalar_one_or_none()
