@@ -27,8 +27,13 @@ class GuestJoinResponse(BaseModel):
 
 
 class PermissionUpdate(BaseModel):
-    can_chat: Optional[bool]
-    can_voice: Optional[bool]
+    can_chat: Optional[bool] = None
+    can_voice: Optional[bool] = None
+    
+    class Config:
+        # Allow partial updates - at least one field should be provided
+        # but we'll validate that in the endpoint
+        pass
 
 
 class PermissionResponse(BaseModel):

@@ -167,14 +167,24 @@ async def kick_guest(db: AsyncSession, guest_id: str, redis: RedisClient) -> Opt
 
 
 async def update_permissions(db: AsyncSession, guest_id: str, permissions: dict) -> Optional[Guest]:
-    """Update permissions_json for a guest (admin/moderator action)."""
+    """Update permissions_json for a guest (admin/moderator action).
+    
+    Note: Moderators always have can_chat and can_voice set to True.
+    This is enforced in the API endpoint before calling this function.
+    """
     result = await db.execute(select(Guest).where(Guest.id == guest_id))
     guest = result.scalar_one_or_none()
     if not guest:
         return None
-    # merge permissions
-    current = guest.permissions_json or {}
+    # merge permissions - create a new dict to ensure SQLAlchemy detects the change
+    current = dict(guest.permissions_json) if guest.permissions_json else {}
     current.update(permissions)
+    
+    # Ensure moderators always have can_chat and can_voice set to True
+    if guest.role == GuestRole.MODERATOR:
+        current["can_chat"] = True
+        current["can_voice"] = True
+    
     guest.permissions_json = current
     db.add(guest)
     await db.flush()
@@ -183,15 +193,32 @@ async def update_permissions(db: AsyncSession, guest_id: str, permissions: dict)
 
 
 async def promote_guest(db: AsyncSession, guest_id: str) -> Optional[Guest]:
-    """Promote a guest to moderator (admin-only action)."""
+    """Promote a guest to moderator (admin-only action).
+    
+    Also sets can_chat and can_voice permissions to True.
+    """
     result = await db.execute(select(Guest).where(Guest.id == guest_id))
     guest = result.scalar_one_or_none()
     if not guest:
         return None
     guest.role = GuestRole.MODERATOR
+    # Set permissions to True when promoting - create a new dict to ensure proper update
+    current_perms = dict(guest.permissions_json) if guest.permissions_json else {}
+    current_perms["can_chat"] = True
+    current_perms["can_voice"] = True
+    guest.permissions_json = current_perms
     db.add(guest)
     await db.flush()
     await db.refresh(guest)
+    
+    # Double-check permissions are set correctly after refresh
+    if guest.permissions_json.get("can_chat") is not True or guest.permissions_json.get("can_voice") is not True:
+        # Force set again if not properly saved
+        guest.permissions_json = {"can_chat": True, "can_voice": True}
+        db.add(guest)
+        await db.flush()
+        await db.refresh(guest)
+    
     return guest
 
 

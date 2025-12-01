@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.models.admin import Admin
 from app.models.guest import Guest, GuestRole
 from typing import Optional, Union
+from app.models.guest import JoinStatus
 from app.services import rate_limit_service
 from fastapi.responses import JSONResponse
 from app.core.config import settings

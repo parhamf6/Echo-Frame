@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.schemas.guest import GuestJoinRequest, GuestJoinResponse, GuestResponse, GuestStatusResponse
@@ -7,13 +7,14 @@ from app.services import guest_service
 from app.utils.ip import extract_client_ip
 from app.core.redis_client import RedisClient
 from app.schemas.guest import PermissionUpdate, PermissionResponse
-from app.models.guest import Guest, JoinStatus
+from app.models.guest import Guest, JoinStatus, GuestRole
 from typing import List, Optional
 from app.core.socketio_manager import (
     emit_permission_changed,
     emit_user_kicked,
     emit_user_list_updated,
-    emit_join_request
+    emit_join_request,
+    emit_role_changed
 )
 
 router = APIRouter()
@@ -167,35 +168,142 @@ async def reject_guest(guest_id: str, admin=Depends(get_current_admin), db: Asyn
 
 
 @router.patch("/{guest_id}/permissions", response_model=PermissionResponse)
-async def update_permissions(guest_id: str, payload: PermissionUpdate, current_user=Depends(require_moderator_or_admin), db: AsyncSession = Depends(get_db_session)):
+async def update_permissions(
+    guest_id: str, 
+    request: Request,
+    current_user=Depends(require_moderator_or_admin), 
+    db: AsyncSession = Depends(get_db_session)
+):
     """Update guest permissions (admin/moderator).
 
     Frontend usage: PATCH with JSON body `{ "can_chat": true, "can_voice": false }`.
     Best practice: UI should reflect permission changes in real-time (WebSocket events).
     """
-    perms = {k: v for k, v in payload.dict().items() if v is not None}
+    import sys
+    import json
+    
+    try:
+        body = await request.json()
+        print(f"DEBUG: Received raw body: {body}", file=sys.stderr)
+    except Exception as e:
+        print(f"DEBUG: Failed to parse JSON: {e}", file=sys.stderr)
+        raise HTTPException(status_code=400, detail="Invalid JSON in request body")
+    
+    # Validate and extract permissions
+    perms = {}
+    if "can_chat" in body and body["can_chat"] is not None:
+        if not isinstance(body["can_chat"], bool):
+            raise HTTPException(status_code=422, detail="can_chat must be a boolean")
+        perms["can_chat"] = body["can_chat"]
+    
+    if "can_voice" in body and body["can_voice"] is not None:
+        if not isinstance(body["can_voice"], bool):
+            raise HTTPException(status_code=422, detail="can_voice must be a boolean")
+        perms["can_voice"] = body["can_voice"]
+    
+    print(f"DEBUG: Filtered perms: {perms}", file=sys.stderr)
+    
     if not perms:
-        raise HTTPException(status_code=400, detail="No permissions provided")
+        raise HTTPException(status_code=400, detail="No permissions provided. At least one of 'can_chat' or 'can_voice' must be provided")
+
+    # Check if guest exists and get their role
+    result = await db.execute(select(Guest).where(Guest.id == guest_id))
+    guest = result.scalar_one_or_none()
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    
+    # Moderators must always have can_chat and can_voice set to True
+    if guest.role == GuestRole.MODERATOR:
+        # Force permissions to True for moderators
+        perms["can_chat"] = True
+        perms["can_voice"] = True
+        print(f"DEBUG: Guest is moderator, forcing permissions to True: {perms}", file=sys.stderr)
 
     guest = await guest_service.update_permissions(db, guest_id, perms)
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
+    
+    # Commit changes to DB
+    await db.commit()
+    
+    # Refresh to get the latest state
+    await db.refresh(guest)
+    
+    # Double-check permissions are correct for moderators
+    if guest.role == GuestRole.MODERATOR:
+        final_perms = dict(guest.permissions_json) if guest.permissions_json else {}
+        final_perms["can_chat"] = True
+        final_perms["can_voice"] = True
+        if guest.permissions_json != final_perms:
+            guest.permissions_json = final_perms
+            db.add(guest)
+            await db.commit()
+            await db.refresh(guest)
+        perms = final_perms
+    
+    print(f"DEBUG: Final permissions before emit: {perms}, guest.permissions_json: {guest.permissions_json}", file=sys.stderr)
     await emit_permission_changed(str(guest.room_id), guest_id, perms)
 
     return PermissionResponse(guest_id=str(guest.id), permissions=guest.permissions_json)
 
 
 @router.patch("/{guest_id}/promote", response_model=GuestResponse)
-async def promote_guest(guest_id: str, admin=Depends(require_admin_only), db: AsyncSession = Depends(get_db_session)):
+async def promote_guest(
+    guest_id: str, 
+    body: Optional[dict] = Body(None),
+    admin=Depends(require_admin_only), 
+    db: AsyncSession = Depends(get_db_session)
+):
     """Promote guest to moderator (admin only).
 
     Frontend: call when admin clicks "Promote". Consider notifying the promoted user via socket.
+    Sets can_chat and can_voice to True when promoting.
     """
     guest = await guest_service.promote_guest(db, guest_id)
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
+    
+    # Commit changes to DB
+    await db.commit()
+    
+    # Refresh to ensure we have the latest data
+    await db.refresh(guest)
+    
+    # Ensure permissions are correct (double-check after commit)
+    if guest.role == GuestRole.MODERATOR:
+        perms = dict(guest.permissions_json) if guest.permissions_json else {}
+        perms["can_chat"] = True
+        perms["can_voice"] = True
+        if guest.permissions_json != perms:
+            guest.permissions_json = perms
+            db.add(guest)
+            await db.commit()
+            await db.refresh(guest)
+    
+    import sys
+    print(f"DEBUG: After promote - role: {guest.role}, permissions: {guest.permissions_json}", file=sys.stderr)
+    
+    # Emit role changed event to notify the promoted user
+    await emit_role_changed(str(guest.room_id), guest_id, guest.role.value)
+    # Emit permission changed event since we updated permissions
+    # Ensure we send a proper dict with boolean values
+    perms_to_send = {
+        "can_chat": bool(guest.permissions_json.get("can_chat", True)),
+        "can_voice": bool(guest.permissions_json.get("can_voice", True))
+    }
+    await emit_permission_changed(str(guest.room_id), guest_id, perms_to_send)
+    await emit_user_list_updated(str(guest.room_id))
 
-    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
+    return GuestResponse(
+        id=str(guest.id), 
+        room_id=str(guest.room_id), 
+        username=guest.username, 
+        join_status=guest.join_status.value, 
+        role=guest.role.value, 
+        kicked=guest.kicked, 
+        created_at=str(guest.created_at),
+        permissions=guest.permissions_json
+    )
 
 
 @router.delete("/{guest_id}")

@@ -89,6 +89,14 @@ async def emit_permission_changed(room_id: str, guest_id: str, permissions: dict
         logger.info(f"Sent permission update to {guest_id}")
 
 
+async def emit_role_changed(room_id: str, guest_id: str, role: str):
+    """Notify specific user about role changes (e.g., promoted to moderator)"""
+    if room_id in room_connections and guest_id in room_connections[room_id]:
+        sid = room_connections[room_id][guest_id]
+        await sio.emit('role_updated', {'role': role}, to=sid)
+        logger.info(f"Sent role update to {guest_id}: {role}")
+
+
 async def emit_user_kicked(room_id: str, guest_id: str):
     """Notify user they were kicked"""
     if room_id in room_connections and guest_id in room_connections[room_id]:

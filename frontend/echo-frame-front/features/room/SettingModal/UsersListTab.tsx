@@ -82,9 +82,11 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
     setUpdatingPermissions((prev) => ({ ...prev, [permissionKey]: true }));
 
     try {
-      await apiClient.patch(`/api/v1/guests/${userId}/permissions`, {
-        [permission]: value,
-      });
+      // Send permission update as JSON body (second argument)
+      await apiClient.patch(
+        `/api/v1/guests/${userId}/permissions`,
+        { [permission]: value }
+      );
 
       // Update local state optimistically
       setUsers((prev) =>
@@ -116,12 +118,21 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
     setPromotingUser(userId);
 
     try {
-      await apiClient.patch(`/api/v1/guests/${userId}/promote`);
+      const { data } = await apiClient.patch(`/api/v1/guests/${userId}/promote`, null);
 
-      // Update local state
+      // Update local state with role and permissions from response
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === userId ? { ...u, role: 'moderator' as const } : u
+          u.id === userId 
+            ? { 
+                ...u, 
+                role: data.role as 'moderator',
+                permissions: data.permissions || {
+                  can_chat: true,
+                  can_voice: true
+                }
+              } 
+            : u
         )
       );
 
