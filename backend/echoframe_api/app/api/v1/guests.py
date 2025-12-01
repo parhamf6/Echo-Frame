@@ -14,7 +14,8 @@ from app.core.socketio_manager import (
     emit_user_kicked,
     emit_user_list_updated,
     emit_join_request,
-    emit_role_changed
+    emit_role_changed,
+    get_guest_presence,
 )
 
 router = APIRouter()
@@ -59,7 +60,21 @@ async def list_pending_guests(room_id: Optional[str] = None, limit: int = 50, ad
     - `limit`: maximum rows to return (default 50)
     """
     guests = await guest_service.get_pending_guests(db, room_id=room_id, limit=limit)
-    return [GuestResponse(id=str(g.id), room_id=str(g.room_id), username=g.username, join_status=g.join_status.value, role=g.role.value, kicked=g.kicked, created_at=str(g.created_at)) for g in guests]
+    return [
+        GuestResponse(
+            id=str(g.id),
+            room_id=str(g.room_id),
+            username=g.username,
+            join_status=g.join_status.value,
+            role=g.role.value,
+            kicked=g.kicked,
+            created_at=str(g.created_at),
+            permissions=None,
+            online=False,
+            offline_since=None,
+        )
+        for g in guests
+    ]
 
 
 @router.get("/list", response_model=List[GuestResponse])
@@ -95,19 +110,35 @@ async def list_guests(
     )
     guests = result.scalars().all()
     
-    return [
-        GuestResponse(
-            id=str(g.id),
-            room_id=str(g.room_id),
-            username=g.username,
-            join_status=g.join_status.value,
-            role=g.role.value,
-            kicked=g.kicked,
-            created_at=str(g.created_at),
-            permissions=g.permissions_json  # ✅ Include permissions
+    response: List[GuestResponse] = []
+    for g in guests:
+        presence = get_guest_presence(str(g.room_id), str(g.id))
+
+        # Skip users who have been offline longer than the TTL
+        if presence.get("stale"):
+            continue
+
+        offline_since_dt = presence.get("offline_since")
+        offline_since_str = (
+            offline_since_dt.isoformat() if offline_since_dt is not None else None
         )
-        for g in guests
-    ]
+
+        response.append(
+            GuestResponse(
+                id=str(g.id),
+                room_id=str(g.room_id),
+                username=g.username,
+                join_status=g.join_status.value,
+                role=g.role.value,
+                kicked=g.kicked,
+                created_at=str(g.created_at),
+                permissions=g.permissions_json,
+                online=bool(presence.get("online")),
+                offline_since=offline_since_str,
+            )
+        )
+
+    return response
 
 
 @router.post("/session/refresh")
@@ -303,6 +334,53 @@ async def promote_guest(
         kicked=guest.kicked, 
         created_at=str(guest.created_at),
         permissions=guest.permissions_json
+    )
+
+
+@router.patch("/{guest_id}/demote", response_model=GuestResponse)
+async def demote_guest(
+    guest_id: str,
+    admin=Depends(require_admin_only),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Demote a moderator back to viewer (admin only)."""
+    target_guest = await guest_service.get_guest_by_id(db, guest_id)
+    if not target_guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    
+    if target_guest.username == admin.username:
+        raise HTTPException(status_code=400, detail="You cannot demote yourself")
+    
+    if target_guest.role != GuestRole.MODERATOR:
+        raise HTTPException(status_code=400, detail="Guest is not a moderator")
+    
+    guest = await guest_service.demote_guest(db, guest_id)
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    
+    await db.commit()
+    await db.refresh(guest)
+    
+    await emit_role_changed(str(guest.room_id), guest_id, guest.role.value)
+    await emit_permission_changed(
+        str(guest.room_id),
+        guest_id,
+        {
+            "can_chat": bool(guest.permissions_json.get("can_chat", False)),
+            "can_voice": bool(guest.permissions_json.get("can_voice", False)),
+        },
+    )
+    await emit_user_list_updated(str(guest.room_id))
+
+    return GuestResponse(
+        id=str(guest.id),
+        room_id=str(guest.room_id),
+        username=guest.username,
+        join_status=guest.join_status.value,
+        role=guest.role.value,
+        kicked=guest.kicked,
+        created_at=str(guest.created_at),
+        permissions=guest.permissions_json,
     )
 
 

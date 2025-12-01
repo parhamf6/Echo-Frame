@@ -3,6 +3,7 @@ import { Figtree, Literata, Victor_Mono, Playfair_Display } from 'next/font/goog
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeTransition } from "@/components/theme-transation";
+import { Toaster } from "@/components/ui/sonner";
 
 const figtree = Figtree({ subsets: ['latin'], variable: '--font-sans' });
 const literata = Literata({ subsets: ['latin'], variable: '--font-serif' });
@@ -34,6 +35,7 @@ export default function RootLayout({
         >
           {/* <ThemeTransition /> */}
           {children}
+          <Toaster richColors closeButton />
         </ThemeProvider>
       </body>
     </html>

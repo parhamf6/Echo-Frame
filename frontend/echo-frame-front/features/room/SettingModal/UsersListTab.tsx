@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { UserCog, Crown, Ban, Loader2, RefreshCw } from 'lucide-react';
+import { UserCog, Crown, Ban, Loader2, RefreshCw, UserMinus } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useGuestStore } from '@/lib/stores/guest-store';
 
@@ -20,6 +20,8 @@ interface User {
     can_voice: boolean;
   };
   kicked: boolean;
+  online?: boolean;
+  offline_since?: string | null;
 }
 
 interface UsersListTabProps {
@@ -33,11 +35,13 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
   const [updatingPermissions, setUpdatingPermissions] = useState<Record<string, boolean>>({});
   const [kickingUser, setKickingUser] = useState<string | null>(null);
   const [promotingUser, setPromotingUser] = useState<string | null>(null);
+  const [demotingUser, setDemotingUser] = useState<string | null>(null);
   
   const params = useParams();
   const roomId = params.roomId as string;
   const { guest } = useGuestStore();
-  const isAdmin = guest?.role === 'moderator' || guest?.role === 'admin';
+  const isAdminUser = guest?.role === 'admin';
+  const canPromote = isAdminUser;
 
   const fetchUsers = async () => {
     try {
@@ -50,7 +54,14 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
         console.error('API returned non-array data:', data);
         setUsers([]);
       } else {
-        setUsers(data);
+        // Sort online users first, then offline
+        const sorted = [...data].sort((a, b) => {
+          const aOnline = a.online ?? true;
+          const bOnline = b.online ?? true;
+          if (aOnline === bOnline) return 0;
+          return aOnline ? -1 : 1;
+        });
+        setUsers(sorted);
       }
     } catch (error: any) {
       console.error('Failed to load users - Full error:', error);
@@ -110,7 +121,7 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
   };
 
   const handlePromote = async (userId: string) => {
-    if (!isAdmin) {
+    if (!canPromote) {
       toast.error('Only admins can promote users to moderator');
       return;
     }
@@ -147,9 +158,51 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
     }
   };
 
-  const handleKick = async (userId: string, username: string) => {
+  const handleDemote = async (userId: string) => {
+    if (!isAdminUser) {
+      toast.error('Only admins can demote moderators');
+      return;
+    }
+
+    setDemotingUser(userId);
+
+    try {
+      const { data } = await apiClient.patch(`/api/v1/guests/${userId}/demote`, null);
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? {
+                ...u,
+                role: data.role as 'viewer',
+                permissions: data.permissions || {
+                  can_chat: false,
+                  can_voice: false,
+                },
+              }
+            : u
+        )
+      );
+
+      toast.success('Moderator demoted to viewer');
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.detail || 'Failed to demote moderator'
+      );
+      console.error('Failed to demote moderator:', error);
+    } finally {
+      setDemotingUser(null);
+    }
+  };
+
+  const handleKick = async (userId: string, username: string, isModeratorTarget: boolean) => {
     if (!canModerate) {
       toast.error('You do not have permission to kick users');
+      return;
+    }
+
+    if (isModeratorTarget && !isAdminUser) {
+      toast.error('Only admins can kick moderators');
       return;
     }
 
@@ -207,8 +260,12 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
   return (
     <div className="space-y-4 max-h-[50vh] overflow-y-auto">
       {users.map((user) => {
-        const isModerator = user.role === 'moderator' || user.role === 'admin';
         const isCurrentUser = user.id === guest?.id;
+        const isAdminSelf = isCurrentUser && isAdminUser;
+        const effectiveRole: User['role'] = isAdminSelf ? 'admin' : user.role;
+        const isModerator = effectiveRole === 'moderator' || effectiveRole === 'admin';
+        const isModeratorTarget = effectiveRole === 'moderator';
+        const isOnline = user.online ?? true;
 
         return (
           <div
@@ -217,20 +274,25 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
           >
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
-                <span className="font-medium">
+                <span className={`font-medium ${!isOnline ? 'text-muted-foreground' : ''}`}>
                   {user.username}
                   {isCurrentUser && ' (You)'}
                 </span>
-                {user.role === 'admin' && (
+                {effectiveRole === 'admin' && (
                   <Badge variant="destructive" className="text-xs">
                     <Crown className="h-3 w-3 mr-1" />
                     Admin
                   </Badge>
                 )}
-                {user.role === 'moderator' && (
+                {effectiveRole === 'moderator' && (
                   <Badge variant="secondary" className="text-xs">
                     <Crown className="h-3 w-3 mr-1" />
                     Moderator
+                  </Badge>
+                )}
+                {!isOnline && (
+                  <Badge variant="outline" className="text-xs opacity-70">
+                    Offline
                   </Badge>
                 )}
               </div>
@@ -246,6 +308,7 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
                     disabled={
                       !canModerate ||
                       isModerator ||
+                      !isOnline ||
                       updatingPermissions[`${user.id}-can_chat`]
                     }
                   />
@@ -266,6 +329,7 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
                     disabled={
                       !canModerate ||
                       isModerator ||
+                      !isOnline ||
                       updatingPermissions[`${user.id}-can_voice`]
                     }
                   />
@@ -282,7 +346,7 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
             {/* Action Buttons */}
             <div className="flex flex-col gap-2 ml-4">
               {/* Promote Button (Admin Only) */}
-              {!isModerator && isAdmin && (
+              {!isModerator && canPromote && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -301,13 +365,37 @@ export default function UsersListTab({ canModerate, userListVersion }: UsersList
                 </Button>
               )}
 
+              {/* Demote Button (Admin only, target moderator) */}
+              {canPromote && isModeratorTarget && !isCurrentUser && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDemote(user.id)}
+                  disabled={demotingUser === user.id}
+                  className="text-xs"
+                >
+                  {demotingUser === user.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <>
+                      <UserMinus className="h-3 w-3 mr-1" />
+                      Demote
+                    </>
+                  )}
+                </Button>
+              )}
+
               {/* Kick Button (Moderator+, can't kick moderators or self) */}
-              {!isModerator && !isCurrentUser && (
+              {!isCurrentUser && (!isModerator || isAdminUser) && (
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleKick(user.id, user.username)}
-                  disabled={!canModerate || kickingUser === user.id}
+                  onClick={() => handleKick(user.id, user.username, isModeratorTarget)}
+                  disabled={
+                    !canModerate ||
+                    kickingUser === user.id ||
+                    (isModeratorTarget && !isAdminUser)
+                  }
                   className="text-xs"
                 >
                   {kickingUser === user.id ? (

@@ -11,6 +11,7 @@ from app.models.admin import Admin
 from app.schemas.guest import GuestJoinRequest, GuestJoinResponse, GuestResponse, GuestStatusResponse
 from app.core.redis_client import RedisClient
 from app.utils.ip import extract_client_ip
+from app.core.socketio_manager import emit_room_closed
 
 router = APIRouter()
 
@@ -46,6 +47,13 @@ async def close_room(room_id: str, admin=Depends(get_current_admin), db: AsyncSe
     room = await room_service.close_room(db, room_id)
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
+
+    # Persist changes
+    await db.commit()
+    await db.refresh(room)
+
+    # Notify all connected users via Socket.IO
+    await emit_room_closed(str(room.id))
 
     return {"detail": "Room closing", "ended_at": room.ended_at}
 

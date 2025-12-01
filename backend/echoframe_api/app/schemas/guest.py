@@ -17,7 +17,9 @@ class GuestResponse(BaseModel):
     role: str
     kicked: bool
     created_at: Optional[str]
-    permissions: Optional[dict] = None  # ✅ ADD THIS LINE
+    permissions: Optional[dict] = None
+    online: Optional[bool] = True
+    offline_since: Optional[str] = None
 
 
 class GuestJoinResponse(BaseModel):

@@ -222,6 +222,22 @@ async def promote_guest(db: AsyncSession, guest_id: str) -> Optional[Guest]:
     return guest
 
 
+async def demote_guest(db: AsyncSession, guest_id: str) -> Optional[Guest]:
+    """Demote a guest back to viewer. Admin-only action."""
+    result = await db.execute(select(Guest).where(Guest.id == guest_id))
+    guest = result.scalar_one_or_none()
+    if not guest:
+        return None
+    
+    guest.role = GuestRole.VIEWER
+    # Reset permissions to safe defaults for viewers
+    guest.permissions_json = {"can_chat": False, "can_voice": False}
+    db.add(guest)
+    await db.flush()
+    await db.refresh(guest)
+    return guest
+
+
 async def get_pending_guests(db: AsyncSession, room_id: Optional[str] = None, limit: int = 50):
     """Return a list of pending Guest objects.
 
