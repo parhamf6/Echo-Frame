@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+echo_frame/__init__.py
+echo_frame/cli.py
+echo_frame/config.py
+echo_frame/commands/__init__.py
+echo_frame/commands/config_cmd.py
+echo_frame/commands/process.py
+echo_frame/commands/upload.py
+echo_frame/utils/__init__.py
+echo_frame/utils/ffmpeg.py
+echo_frame_cli.egg-info/PKG-INFO
+echo_frame_cli.egg-info/SOURCES.txt
+echo_frame_cli.egg-info/dependency_links.txt
+echo_frame_cli.egg-info/entry_points.txt
+echo_frame_cli.egg-info/requires.txt
+echo_frame_cli.egg-info/top_level.txt

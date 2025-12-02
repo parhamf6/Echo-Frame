@@ -1,0 +1,2 @@
+[console_scripts]
+echo-frame = echo_frame.cli:app

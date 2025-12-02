@@ -1,0 +1,25 @@
+[project]
+name = "echo-frame-cli"
+version = "0.1.0"
+description = "CLI utilities for Echo Frame video processing and upload"
+authors = [{name = "Echo Frame", email = "team@echo-frame.local"}]
+requires-python = ">=3.10"
+dependencies = [
+  "typer[all]~=0.12",
+  "rich~=13.7",
+  "pyyaml~=6.0",
+  "pydantic~=2.5",
+  "ffmpeg-python~=0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]
+
+[project.scripts]
+echo-frame = "echo_frame.cli:app"
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"

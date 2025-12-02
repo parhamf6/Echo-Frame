@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: echo-frame-cli
+Version: 0.1.0
+Summary: CLI utilities for Echo Frame video processing and upload
+Author-email: Echo Frame <team@echo-frame.local>
+Requires-Python: >=3.10
+Requires-Dist: typer[all]~=0.12
+Requires-Dist: rich~=13.7
+Requires-Dist: pyyaml~=6.0
+Requires-Dist: pydantic~=2.5
+Requires-Dist: ffmpeg-python~=0.2
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"

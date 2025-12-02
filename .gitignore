@@ -201,74 +201,74 @@ backend/echoframe_api/storage/**/thumbnail.png
 # ============================================================
 
 # Python bytecode
-cli-tool/__pycache__/
-cli-tool/**/__pycache__/
-cli-tool/*.py[cod]
-cli-tool/*$py.class
-cli-tool/**/*.py[cod]
-cli-tool/**/*$py.class
+cli/__pycache__/
+cli/**/__pycache__/
+cli/*.py[cod]
+cli/*$py.class
+cli/**/*.py[cod]
+cli/**/*$py.class
 
 # Virtual environment
-cli-tool/venv/
-cli-tool/.venv/
-cli-tool/env/
-cli-tool/ENV/
-cli-tool/virtualenv/
+cli/venv/
+cli/.venv/
+cli/env/
+cli/ENV/
+cli/virtualenv/
 
 # Distribution / packaging
-cli-tool/.Python
-cli-tool/build/
-cli-tool/develop-eggs/
-cli-tool/dist/
-cli-tool/downloads/
-cli-tool/eggs/
-cli-tool/.eggs/
-cli-tool/lib/
-cli-tool/lib64/
-cli-tool/parts/
-cli-tool/sdist/
-cli-tool/var/
-cli-tool/wheels/
-cli-tool/share/python-wheels/
-cli-tool/*.egg-info/
-cli-tool/.installed.cfg
-cli-tool/*.egg
-cli-tool/MANIFEST
+cli/.Python
+cli/build/
+cli/develop-eggs/
+cli/dist/
+cli/downloads/
+cli/eggs/
+cli/.eggs/
+cli/lib/
+cli/lib64/
+cli/parts/
+cli/sdist/
+cli/var/
+cli/wheels/
+cli/share/python-wheels/
+cli/*.egg-info/
+cli/.installed.cfg
+cli/*.egg
+cli/MANIFEST
 
 # CLI Testing
-cli-tool/htmlcov/
-cli-tool/.tox/
-cli-tool/.coverage
-cli-tool/.pytest_cache/
-cli-tool/*.log
+cli/htmlcov/
+cli/.tox/
+cli/.coverage
+cli/.pytest_cache/
+cli/*.log
 
 # CLI output directories (processed videos)
-cli-tool/output/
-cli-tool/temp/
-cli-tool/processed/
-cli-tool/test-output/
-cli-tool/test_output/
+cli/output/
+cli/temp/
+cli/processed/
+cli/test-output/
+cli/test_output/
 
 # User config (contains server URL and tokens)
-cli-tool/config.yaml
-cli-tool/.echo-frame/
+cli/config.yaml
+cli/.echo-frame/
 
 # User home directory config (CLI stores config here)
 .echo-frame/config.yaml
 
 # Test videos for CLI development
-cli-tool/test-videos/
-cli-tool/sample-*.mp4
-cli-tool/test*.mp4
-cli-tool/*.mp4
-cli-tool/*.avi
-cli-tool/*.mkv
+cli/test-videos/
+cli/sample-*.mp4
+cli/test*.mp4
+cli/*.mp4
+cli/*.avi
+cli/*.mkv
 
 # CLI generated files
-cli-tool/*.m3u8
-cli-tool/*.ts
-cli-tool/*.jpg
-cli-tool/*.png
+cli/*.m3u8
+cli/*.ts
+cli/*.jpg
+cli/*.png
 
 # ============================================================
 # DATABASE
@@ -668,7 +668,7 @@ __pypackages__/
 !requirements.txt
 !backend/echoframe_api/requirements.txt
 !backend/echoframe_api/requirements-dev.txt
-!cli-tool/requirements.txt
+!cli/requirements.txt
 
 # Minified files (generated)
 *.min.js
