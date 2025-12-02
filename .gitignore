@@ -39,38 +39,41 @@ livekit/secrets/
 # ============================================================
 
 # Next.js build output
-frontend/echo-frame-front/.next/
-frontend/echo-frame-front/out/
-frontend/echo-frame-front/build/
-frontend/echo-frame-front/dist/
+frontend/echoframe-front/.next/
+frontend/echoframe-front/out/
+frontend/echoframe-front/build/
+frontend/echoframe-front/dist/
 
 # Next.js cache
-frontend/echo-frame-front/.cache/
-frontend/echo-frame-front/.turbo/
+frontend/echoframe-front/.cache/
+frontend/echoframe-front/.turbo/
 
 # Next.js environment
-frontend/echo-frame-front/.env.local
-frontend/echo-frame-front/.env.development.local
-frontend/echo-frame-front/.env.test.local
-frontend/echo-frame-front/.env.production.local
+frontend/echoframe-front/.env.local
+frontend/echoframe-front/.env.development.local
+frontend/echoframe-front/.env.test.local
+frontend/echoframe-front/.env.production.local
 
 # Testing
-frontend/echo-frame-front/coverage/
-frontend/echo-frame-front/.nyc_output/
-frontend/echo-frame-front/test-results/
-frontend/echo-frame-front/playwright-report/
-frontend/echo-frame-front/playwright/.cache/
+frontend/echoframe-front/coverage/
+frontend/echoframe-front/.nyc_output/
+frontend/echoframe-front/test-results/
+frontend/echoframe-front/playwright-report/
+frontend/echoframe-front/playwright/.cache/
 
 # TypeScript
-frontend/echo-frame-front/.tsbuildinfo
-frontend/echo-frame-front/next-env.d.ts
+frontend/echoframe-front/.tsbuildinfo
+frontend/echoframe-front/next-env.d.ts
 
 # Vercel/Netlify (if deploying)
-frontend/echo-frame-front/.vercel
-frontend/echo-frame-front/.netlify
+frontend/echoframe-front/.vercel
+frontend/echoframe-front/.netlify
 
 # Node modules
-frontend/echo-frame-front/node_modules/
+frontend/echoframe-front/node_modules/
+
+# IMPORTANT: Keep frontend lib/ folder (contains API client, auth store, etc.)
+# DO NOT ignore: frontend/echoframe-front/lib/
 
 # ============================================================
 # BACKEND (FastAPI + Python)
@@ -202,30 +205,70 @@ cli-tool/__pycache__/
 cli-tool/**/__pycache__/
 cli-tool/*.py[cod]
 cli-tool/*$py.class
+cli-tool/**/*.py[cod]
+cli-tool/**/*$py.class
 
 # Virtual environment
 cli-tool/venv/
 cli-tool/.venv/
 cli-tool/env/
+cli-tool/ENV/
+cli-tool/virtualenv/
 
-# Distribution
-cli-tool/dist/
+# Distribution / packaging
+cli-tool/.Python
 cli-tool/build/
+cli-tool/develop-eggs/
+cli-tool/dist/
+cli-tool/downloads/
+cli-tool/eggs/
+cli-tool/.eggs/
+cli-tool/lib/
+cli-tool/lib64/
+cli-tool/parts/
+cli-tool/sdist/
+cli-tool/var/
+cli-tool/wheels/
+cli-tool/share/python-wheels/
 cli-tool/*.egg-info/
+cli-tool/.installed.cfg
+cli-tool/*.egg
+cli-tool/MANIFEST
+
+# CLI Testing
+cli-tool/htmlcov/
+cli-tool/.tox/
+cli-tool/.coverage
+cli-tool/.pytest_cache/
+cli-tool/*.log
 
 # CLI output directories (processed videos)
 cli-tool/output/
 cli-tool/temp/
 cli-tool/processed/
 cli-tool/test-output/
+cli-tool/test_output/
 
 # User config (contains server URL and tokens)
 cli-tool/config.yaml
 cli-tool/.echo-frame/
 
+# User home directory config (CLI stores config here)
+.echo-frame/config.yaml
+
 # Test videos for CLI development
 cli-tool/test-videos/
 cli-tool/sample-*.mp4
+cli-tool/test*.mp4
+cli-tool/*.mp4
+cli-tool/*.avi
+cli-tool/*.mkv
+
+# CLI generated files
+cli-tool/*.m3u8
+cli-tool/*.ts
+cli-tool/*.jpg
+cli-tool/*.png
 
 # ============================================================
 # DATABASE
@@ -621,7 +664,7 @@ __pypackages__/
 
 # Lock files - KEEP package-lock.json and requirements.txt
 !package-lock.json
-!frontend/echo-frame-front/package-lock.json
+!frontend/echoframe-front/package-lock.json
 !requirements.txt
 !backend/echoframe_api/requirements.txt
 !backend/echoframe_api/requirements-dev.txt
@@ -663,7 +706,7 @@ bower_components/
 
 # Keep example/template files
 !.env.example
-!frontend/echo-frame-front/.env.local.example
+!frontend/echoframe-front/.env.local.example
 !backend/echoframe_api/.env.example
 !docker-compose.example.yml
 !config.example.json
@@ -678,13 +721,21 @@ bower_components/
 !.github/assets/**
 
 # Keep public frontend assets
-!frontend/echo-frame-front/public/**/*.jpg
-!frontend/echo-frame-front/public/**/*.jpeg
-!frontend/echo-frame-front/public/**/*.png
-!frontend/echo-frame-front/public/**/*.gif
-!frontend/echo-frame-front/public/**/*.svg
-!frontend/echo-frame-front/public/**/*.ico
-!frontend/echo-frame-front/public/**/*.webp
+!frontend/echoframe-front/public/**/*.jpg
+!frontend/echoframe-front/public/**/*.jpeg
+!frontend/echoframe-front/public/**/*.png
+!frontend/echoframe-front/public/**/*.gif
+!frontend/echoframe-front/public/**/*.svg
+!frontend/echoframe-front/public/**/*.ico
+!frontend/echoframe-front/public/**/*.webp
+
+# CRITICAL: Keep frontend lib/ folder (API client, auth store, utils)
+!frontend/echoframe-front/lib/
+!frontend/echoframe-front/lib/**
+!frontend/echoframe-front/src/lib/
+!frontend/echoframe-front/src/lib/**
+!frontend/echoframe-front/app/lib/
+!frontend/echoframe-front/app/lib/**
 
 # Keep gitkeep for empty directories
 !**/.gitkeep
