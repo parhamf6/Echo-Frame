@@ -26,7 +26,24 @@ class VideoMetadata:
 
 def _resolve_binary(binary: str, override: Optional[Path]) -> str:
     if override:
-        return str(override)
+        override_str = str(override)
+        # Validate that override looks like a file path (not a URL or other invalid value)
+        if override_str.startswith(("http://", "https://", "Server URL:")):
+            # Invalid override value, fall back to auto-detection
+            path = shutil.which(binary)
+            if not path:
+                raise FFmpegNotFoundError(
+                    f"{binary} is not installed or not on PATH. "
+                    f"Config has invalid ffmpeg_path value: {override_str}. "
+                    f"Fix it with: echo-frame config set ffmpeg_path <path>"
+                )
+            return path
+        # Check if the override path exists and is executable
+        override_path = Path(override_str)
+        if override_path.exists() and override_path.is_file():
+            return override_str
+        # Path doesn't exist, but user specified it, so try it anyway (might be valid but not found yet)
+        return override_str
     path = shutil.which(binary)
     if not path:
         raise FFmpegNotFoundError(f"{binary} is not installed or not on PATH")

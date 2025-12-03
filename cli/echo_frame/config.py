@@ -24,6 +24,11 @@ class CLIConfig(BaseModel):
 
     def masked_dict(self) -> dict[str, Any]:
         data = self.model_dump()
+        # Convert Pydantic types to strings for display
+        if 'server_url' in data and data['server_url'] is not None:
+            data['server_url'] = str(data['server_url'])
+        if 'ffmpeg_path' in data and data['ffmpeg_path'] is not None:
+            data['ffmpeg_path'] = str(data['ffmpeg_path'])
         token = data.get("admin_token")
         if token:
             data["admin_token"] = f"{token[:4]}***{token[-4:]}" if len(token) > 8 else "***"
@@ -40,6 +45,14 @@ def load_config() -> CLIConfig:
         raw = yaml.safe_load(CONFIG_PATH.read_text()) or {}
     else:
         raw = {}
+    
+    # Validate and clean ffmpeg_path if it's set to an invalid value (e.g., URL)
+    if 'ffmpeg_path' in raw and raw['ffmpeg_path']:
+        ffmpeg_path_str = str(raw['ffmpeg_path'])
+        # If it looks like a URL or invalid value, clear it
+        if ffmpeg_path_str.startswith(("http://", "https://", "Server URL:")):
+            raw['ffmpeg_path'] = None
+    
     try:
         return CLIConfig(**raw)
     except ValidationError as exc:
@@ -48,7 +61,14 @@ def load_config() -> CLIConfig:
 
 def save_config(config: CLIConfig) -> None:
     ensure_config_dir()
-    CONFIG_PATH.write_text(yaml.safe_dump(config.model_dump(exclude_none=True), sort_keys=False))
+    # Convert Pydantic types to YAML-serializable values
+    data = config.model_dump(exclude_none=True)
+    # Convert AnyHttpUrl to string and Path to string
+    if 'server_url' in data and data['server_url'] is not None:
+        data['server_url'] = str(data['server_url'])
+    if 'ffmpeg_path' in data and data['ffmpeg_path'] is not None:
+        data['ffmpeg_path'] = str(data['ffmpeg_path'])
+    CONFIG_PATH.write_text(yaml.safe_dump(data, sort_keys=False))
 
 
 def update_config(**updates: Any) -> CLIConfig:

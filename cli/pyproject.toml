@@ -10,6 +10,7 @@ dependencies = [
   "pyyaml~=6.0",
   "pydantic~=2.5",
   "ffmpeg-python~=0.2",
+  "requests~=2.32",
 ]
 
 [project.optional-dependencies]

@@ -9,5 +9,6 @@ Requires-Dist: rich~=13.7
 Requires-Dist: pyyaml~=6.0
 Requires-Dist: pydantic~=2.5
 Requires-Dist: ffmpeg-python~=0.2
+Requires-Dist: requests~=2.32
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
