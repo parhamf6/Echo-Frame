@@ -23,7 +23,7 @@ from ..utils.ffmpeg import (
 )
 
 console = Console()
-process_app = typer.Typer(help="Process videos into HLS packages")
+process_app = typer.Typer(help="Process videos into HLS packages.\n\nAspect Ratio Handling: By default, the tool preserves the original aspect ratio of the source video. For segment-only mode, the original resolution is kept. For transcode mode, the video is scaled to the target height while maintaining aspect ratio. If the source aspect ratio differs from the preset, a warning is shown, but processing continues.")
 
 SEGMENT_LENGTH = 4
 
@@ -217,13 +217,19 @@ def _print_plan(plans: List[RenditionPlan], output_dir: Path, subtitles: List[tu
     table.add_column("Mode")
     table.add_column("Target Dir")
     for plan in plans:
+        # Calculate aspect ratios
+        src_ar = round(plan.metadata.width / plan.metadata.height, 3) if plan.metadata.height else 0
+        preset_ar = round(plan.preset.width / plan.preset.height, 3) if plan.preset.height else 0
+        aspect_warn = " (aspect mismatch!)" if abs(src_ar - preset_ar) > 0.01 else ""
         table.add_row(
             plan.preset.label,
             str(plan.source.name),
-            plan.metadata.resolution_label,
+            plan.metadata.resolution_label + aspect_warn,
             "transcode" if plan.transcode else "segment-only",
             f"{output_dir}/{plan.name}",
         )
+        if aspect_warn:
+            console.print(f"[yellow]Warning: Source aspect ratio ({src_ar}) differs from preset ({preset_ar}) for {plan.preset.label}[/yellow]")
     console.print(table)
     if subtitles:
         sub_table = Table(title="Subtitles")
@@ -287,7 +293,8 @@ def _run_single_plan(plan: RenditionPlan, ffmpeg_bin: str, output_dir: Path, log
             f"{plan.preset.audio_bitrate}k",
         ]
     else:
-        cmd += ["-c", "copy"]
+        # Copy only video and audio streams, exclude subtitles/attachments
+        cmd += ["-map", "0:v", "-map", "0:a", "-c", "copy"]
 
     cmd += [
         "-hls_time",

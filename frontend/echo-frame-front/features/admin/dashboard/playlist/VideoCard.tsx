@@ -13,6 +13,21 @@ interface VideoCardProps {
   isDragging?: boolean;
 }
 
+// Helper: Clean and title-case the string
+const formatTitle = (input: string): string => {
+  // Keep only alphanumeric + spaces, collapse whitespace
+  const cleaned = input
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')   // Replace non-alphanumeric with space
+    .replace(/\s+/g, ' ')              // Collapse multiple spaces
+    .trim();
+
+  // Title case: uppercase first letter of each word
+  return cleaned
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 export function VideoCard({ video, onDelete, onViewDetails, isDragging }: VideoCardProps) {
   const {
     attributes,
@@ -26,96 +41,109 @@ export function VideoCard({ video, onDelete, onViewDetails, isDragging }: VideoC
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    zIndex: isSortableDragging ? 10 : 'auto',
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+const formatDuration = (seconds: number) => {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
 
-  // Generate gradient from video ID for consistent fallback colors
+  return [
+    hrs.toString().padStart(2, "0"),
+    mins.toString().padStart(2, "0"),
+    secs.toString().padStart(2, "0")
+  ].join(":");
+};
+
+
   const getGradient = (id: string) => {
     const hue1 = parseInt(id.slice(0, 2), 16) % 360;
     const hue2 = (hue1 + 60) % 360;
-    return `linear-gradient(135deg, hsl(${hue1}, 70%, 50%), hsl(${hue2}, 70%, 50%))`;
+    return `linear-gradient(135deg, hsl(${hue1}, 70%, 45%), hsl(${hue2}, 70%, 45%))`;
   };
+
+  const cleanTitle = formatTitle(video.title);
 
   return (
     <motion.div
       ref={setNodeRef}
       style={style}
       layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      className={`group relative bg-card border border-border rounded-xl overflow-hidden transition-all duration-200 ${
-        isSortableDragging ? 'opacity-50 scale-95' : 'hover:shadow-lg hover:border-accent/50'
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className={`group relative bg-card border border-border rounded-xl overflow-hidden transition-all duration-300 will-change-transform ${
+        isSortableDragging
+          ? 'opacity-40 scale-[0.98]'
+          : 'hover:shadow-md hover:border-accent/30'
       }`}
     >
-      {/* Drag Handle Overlay */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 left-2 z-10 p-1.5 rounded-lg bg-background/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
-      >
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
-      </div>
-
-      {/* Order Badge */}
-      <div className="absolute top-2 right-2 z-10 px-2 py-1 rounded-lg bg-accent/90 backdrop-blur-sm text-accent-foreground text-xs font-bold">
-        #{video.playlist_order}
-      </div>
-
-      {/* Thumbnail */}
-      <div className="relative h-48 overflow-hidden bg-muted">
+      {/* Thumbnail — 16:9, no overlay */}
+      <div className="relative pb-[56.25%] h-0 bg-muted overflow-hidden">
         {video.thumbnail_path ? (
           <img
             src={video.thumbnail_path}
-            alt={video.title}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            alt={cleanTitle}
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
           />
         ) : (
           <div
-            className="w-full h-full"
+            className="absolute inset-0"
             style={{ background: getGradient(video.id) }}
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-card/90 to-transparent" />
-      </div>
 
-      {/* Content */}
-      <div className="p-4 space-y-3">
-        <div>
-          <h3 className="font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
-            {video.title}
-          </h3>
+        {/* Order Badge — top right */}
+        <div className="absolute top-3 right-3 z-10 px-2 py-1 rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-sm text-foreground text-xs font-bold">
+          #{video.playlist_order}
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        {/* Drag Handle — top left */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute top-3 left-3 z-10 p-1.5 rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="w-4 h-4 text-muted-foreground" />
+        </div>
+      </div>
+
+      {/* Content area — clearly separated */}
+      <div className="p-4 space-y-3 border-t border-border/30">
+        <h3 className="font-semibold text-foreground line-clamp-2 group-hover:text-primary transition-colors leading-tight">
+          {cleanTitle}
+        </h3>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5 flex-shrink-0" />
             <span>{formatDuration(video.duration_seconds)}</span>
           </div>
+
           {video.subtitles.length > 0 && (
-            <span className="px-2 py-0.5 rounded-md bg-accent/10 text-accent font-medium">
-              {video.subtitles.length} subtitle{video.subtitles.length > 1 ? 's' : ''}
+            <span className="px-2 py-0.5 rounded-md bg-accent/10 text-accent font-medium whitespace-nowrap">
+              {video.subtitles.length} subtitle{video.subtitles.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-2 pt-1">
           <button
             onClick={() => onViewDetails(video)}
-            className="flex-1 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            className="flex-1 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            aria-label={`View details for ${cleanTitle}`}
           >
             <Info className="w-4 h-4" />
             Details
           </button>
           <button
             onClick={() => onDelete(video)}
-            className="px-3 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors"
+            className="px-3 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-destructive/50"
+            aria-label={`Remove ${cleanTitle} from playlist`}
           >
             <Trash2 className="w-4 h-4" />
           </button>

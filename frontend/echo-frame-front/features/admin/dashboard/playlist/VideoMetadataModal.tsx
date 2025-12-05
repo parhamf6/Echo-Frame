@@ -209,7 +209,7 @@ export function VideoMetadataModal({ video, isOpen, onClose }: VideoMetadataModa
                       {metadata.renditions.map((rendition, index) => (
                         <div
                           key={index}
-                          className="p-4 rounded-lg bg-gradient-to-r from-primary/5 to-accent/5 border border-border"
+                          className="p-4 rounded-lg bg-gradient-to-r from-primary/25 to-accent/25 border border-border"
                         >
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
