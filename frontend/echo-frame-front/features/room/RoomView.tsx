@@ -1,5 +1,3 @@
-// app/room/[roomId]/components/RoomView.tsx
-
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -25,31 +23,46 @@ interface ServerState {
   last_updated?: string;
 }
 
-// Track all users' timestamps for comparison
 interface UserTimestamp {
   guest_id: string;
   timestamp: number;
   is_playing: boolean;
-  updated_at: number; // Date.now()
+  updated_at: number;
 }
+
+// Get full URL for video resources
+const getVideoUrl = (path: string): string => {
+  if (!path) return '';
+
+  // Fix common malformed prefixes (some stored paths may have 'http//' instead of 'http://')
+  if (path.startsWith('http//')) path = path.replace(/^http:\/\//, 'http://');
+  if (path.startsWith('https//')) path = path.replace(/^https:\/\//, 'https://');
+
+  // If already an absolute URL (http(s)://) or protocol-relative (//), return it as-is
+  if (/^https?:\/\//i.test(path) || /^\/\//.test(path)) {
+    return path;
+  }
+
+  // Otherwise treat as a relative path and prefix with configured NGINX URL
+  const nginxUrl = (process.env.NEXT_PUBLIC_NGINX_URL || 'http://echoframe-nginx.com').replace(/\/$/, '');
+  if (!path.startsWith('/')) path = `/${path}`;
+  return `${nginxUrl}${path}`;
+};
 
 export default function RoomView({ roomId }: RoomViewProps) {
   const { guest } = useGuestStore();
   const [userListVersion, setUserListVersion] = useState(0);
   
-  // Server state (authoritative)
   const [serverState, setServerState] = useState<ServerState>({});
   const [localTime, setLocalTime] = useState<number>(0);
-  
-  // Track all users' positions (including admin)
   const [userTimestamps, setUserTimestamps] = useState<Map<string, UserTimestamp>>(new Map());
 
-  // UI state
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [playlist, setPlaylist] = useState<Video[]>([]);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
+  const [qualities, setQualities] = useState<Array<{ label: string; uri: string; resolution?: string; bandwidth?: number }>>([]);
+  const [selectedQuality, setSelectedQuality] = useState<string>('Auto');
 
-  // Refs
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<any>(null);
@@ -58,51 +71,108 @@ export default function RoomView({ roomId }: RoomViewProps) {
 
   const isModOrAdmin = guest?.role === 'admin' || guest?.role === 'moderator';
   const currentVideo = playlist.find((v) => v.id === serverState.current_video_id) || playlist[0];
-  const hlsUrl = currentVideo?.hls_manifest_path || '';
+  const hlsUrl = currentVideo?.hls_manifest_path ? getVideoUrl(currentVideo.hls_manifest_path) : '';
 
-  // Sync calculations
-  const SYNC_THRESHOLD = 2.5; // Show sync if >2.5s out of sync
+  // Parse master manifest to discover available qualities
+  const parseMasterManifest = (text: string, baseUrl: string) => {
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const variants: Array<{ label: string; uri: string; resolution?: string; bandwidth?: number }> = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('#EXT-X-STREAM-INF')) {
+        // parse attributes
+        const attrsPart = line.split(':')[1] || '';
+        const attrs: Record<string, string> = {};
+        attrsPart.split(',').forEach((pair) => {
+          const [k, v] = pair.split('=');
+          if (k && v) attrs[k.trim()] = v.trim();
+        });
+
+        const uriLine = lines[i + 1];
+        if (!uriLine) continue;
+        // resolve relative URI against base
+        let resolved = uriLine;
+        try {
+          resolved = new URL(uriLine, baseUrl).toString();
+        } catch (e) {}
+
+        const bandwidth = attrs['BANDWIDTH'] ? Number(attrs['BANDWIDTH']) : undefined;
+        const resolution = attrs['RESOLUTION'];
+        const label = resolution ? `${resolution} (${bandwidth ? Math.round(bandwidth / 1000) + 'kbps' : ''})` : (bandwidth ? `${Math.round(bandwidth / 1000)}kbps` : uriLine);
+
+        variants.push({ label, uri: resolved, resolution, bandwidth });
+      }
+    }
+
+    return variants;
+  };
+
+  const SYNC_THRESHOLD = 2.5;
   const [syncDelta, setSyncDelta] = useState<number | null>(null);
   const [needsSync, setNeedsSync] = useState(false);
 
-  // Find admin's current timestamp
-  const getAdminTimestamp = (): number | null => {
+  // Find the most authoritative timestamp (admin/mod who's most recently updated)
+  const getAuthoritativeTimestamp = (): number | null => {
+    if (isModOrAdmin) return null; // Mods don't need to sync
+
+    let bestTimestamp: UserTimestamp | null = null;
+    let mostRecent = 0;
+
     for (const [guestId, data] of userTimestamps.entries()) {
-      // Check if this is an admin/moderator based on their timestamp updates
-      // Admins will have the most recent updates
-      if (data.updated_at && Date.now() - data.updated_at < 5000) {
-        return data.timestamp;
+      if (guestId === guest?.id) continue; // Skip self
+      
+      // Only consider timestamps updated in last 5 seconds
+      const age = Date.now() - data.updated_at;
+      if (age > 5000) continue;
+
+      if (data.updated_at > mostRecent) {
+        mostRecent = data.updated_at;
+        bestTimestamp = data;
       }
     }
-    return null;
+
+    if (!bestTimestamp) return null;
+
+    // Calculate current position if playing
+    if (bestTimestamp.is_playing) {
+      const elapsed = (Date.now() - bestTimestamp.updated_at) / 1000;
+      return bestTimestamp.timestamp + elapsed;
+    }
+
+    return bestTimestamp.timestamp;
   };
 
-  // Continuous sync check for viewers
+  // Continuous sync monitoring for viewers
   useEffect(() => {
     if (isModOrAdmin || !playerRef.current) return;
 
-    const interval = setInterval(() => {
+    const checkSync = () => {
       try {
         const myTime = playerRef.current.currentTime();
-        setLocalTime(myTime);
+        const authTime = getAuthoritativeTimestamp();
         
-        const adminTime = getAdminTimestamp();
-        
-        if (adminTime !== null) {
-          const delta = adminTime - myTime;
+        if (authTime !== null) {
+          const delta = authTime - myTime;
           setSyncDelta(delta);
           setNeedsSync(Math.abs(delta) > SYNC_THRESHOLD);
         } else {
           setSyncDelta(null);
           setNeedsSync(false);
         }
-      } catch (e) {}
-    }, 500);
+      } catch (e) {
+        console.error('[SyncCheck] Error:', e);
+      }
+    };
+
+    // Check immediately and then every 500ms
+    checkSync();
+    const interval = setInterval(checkSync, 500);
 
     return () => clearInterval(interval);
-  }, [isModOrAdmin, userTimestamps]);
+  }, [isModOrAdmin, userTimestamps, guest?.id]);
 
-  // Fetch playlist on mount
+  // Fetch playlist
   useEffect(() => {
     if (playlist.length === 0 || playlistOpen) {
       setLoadingPlaylist(true);
@@ -185,48 +255,33 @@ export default function RoomView({ roomId }: RoomViewProps) {
     if (!playerRef.current || !serverState) return;
 
     const applyState = async () => {
-      console.log('[ApplyState] Starting...', { 
-        timestamp: serverState.current_timestamp, 
-        isPlaying: serverState.is_playing 
-      });
-      
       isServerActionRef.current = true;
 
       try {
-        // Apply timestamp if provided
         if (typeof serverState.current_timestamp === 'number') {
           const currentTime = playerRef.current.currentTime();
           const delta = Math.abs(currentTime - serverState.current_timestamp);
           
-          console.log('[ApplyState] Timestamp delta:', delta);
-          
-          // Only seek if delta > 1 second (avoid jitter)
           if (delta > 1) {
-            console.log('[ApplyState] Seeking to:', serverState.current_timestamp);
             playerRef.current.currentTime(serverState.current_timestamp);
           }
         }
 
-        // Apply play/pause state
         if (typeof serverState.is_playing === 'boolean') {
-          console.log('[ApplyState] Setting play state:', serverState.is_playing);
           if (serverState.is_playing) {
             const playPromise = playerRef.current.play();
             if (playPromise !== undefined) {
-              await playPromise.catch((e) => {
-                console.warn('[ApplyState] Play failed:', e);
-              });
+              await playPromise.catch((e: any) => console.warn('[ApplyState] Play failed:', e));
             }
           } else {
             playerRef.current.pause();
           }
         }
       } catch (e) {
-        console.warn('[ApplyState] Failed to apply server state', e);
+        console.warn('[ApplyState] Failed', e);
       } finally {
         setTimeout(() => {
           isServerActionRef.current = false;
-          console.log('[ApplyState] Reset server action flag');
         }, 200);
       }
     };
@@ -234,7 +289,7 @@ export default function RoomView({ roomId }: RoomViewProps) {
     applyState();
   }, [serverState.current_timestamp, serverState.is_playing]);
 
-  // Initialize/update Video.js player
+  // Initialize Video.js player with subtitles
   useEffect(() => {
     if (!videoContainerRef.current || !hlsUrl) return;
 
@@ -250,12 +305,11 @@ export default function RoomView({ roomId }: RoomViewProps) {
       }
     }
 
-    // Create new player
     if (!playerRef.current) {
       const videoEl = document.createElement('video');
       videoEl.className = 'video-js vjs-big-play-centered';
       videoEl.setAttribute('playsinline', '');
-      videoEl.setAttribute('controls', isModOrAdmin ? 'true' : 'false');
+      videoEl.setAttribute('crossorigin', 'anonymous'); // Required for subtitles
 
       videoContainerRef.current.appendChild(videoEl);
       videoElRef.current = videoEl;
@@ -272,44 +326,114 @@ export default function RoomView({ roomId }: RoomViewProps) {
           fullscreenToggle: true,
           volumePanel: true,
           pictureInPictureToggle: false,
+          subtitlesButton: true,
         },
       });
 
       playerRef.current = player;
 
-      // Add subtitles BEFORE loading source
+      // Set video source (initially Master playlist)
+      player.src({
+        src: hlsUrl,
+        type: 'application/x-mpegURL',
+      });
+
+      // Fetch master manifest to discover variant playlists (qualities)
+      if (hlsUrl) {
+        fetch(hlsUrl)
+          .then((res) => res.text())
+          .then((text) => {
+            try {
+              const variants = parseMasterManifest(text, hlsUrl);
+              if (variants.length) {
+                setQualities(variants);
+                // keep default selection as Auto (master)
+              }
+            } catch (e) {
+              console.warn('[HLS] Failed to parse master manifest', e);
+            }
+          })
+          .catch((e) => {
+            console.warn('[HLS] Could not fetch master manifest', e);
+          });
+      }
+
+      // Add subtitle tracks using Video.js API to ensure the control menu appears
       if (currentVideo?.subtitles?.length) {
-        currentVideo.subtitles.forEach((subtitle, index) => {
+        console.log('[Subtitles] Adding', currentVideo.subtitles.length, 'tracks via Video.js API');
+
+        // Wait until player is ready
+        player.ready(() => {
           try {
-            player.addRemoteTextTrack({
-              kind: 'subtitles',
-              src: subtitle.file_path,
-              srclang: subtitle.language,
-              label: subtitle.label,
-              default: index === 0,
-            }, false);
-            console.log('[RoomView] Added subtitle track:', subtitle.label);
+            // Remove existing remote text tracks to avoid duplicates on video switch
+            const existing = player.remoteTextTracks ? Array.from(player.remoteTextTracks() as any) : [];
+            if (existing.length) {
+              // remove from the end so indexes remain valid
+              existing.reverse().forEach((t: any) => {
+                try { player.removeRemoteTextTrack(t); } catch (e) {}
+              });
+            }
+
+            currentVideo.subtitles.forEach((subtitle: any, index: number) => {
+              const src = getVideoUrl(subtitle.file_path);
+              const options = {
+                kind: 'subtitles',
+                src,
+                srclang: subtitle.language || subtitle.lang || 'en',
+                label: subtitle.label || subtitle.language || 'Subtitle',
+                default: index === 0,
+              } as any;
+
+              // Use addRemoteTextTrack so Video.js creates the menu entries
+              const added = player.addRemoteTextTrack(options, false);
+              console.log('[Subtitles] Added via API:', options.label, 'at', src, { added });
+            });
+
+            // Ensure first track showing if default
+            const tracks = player.textTracks ? Array.from(player.textTracks() as any) as any[] : [];
+            for (let i = 0; i < tracks.length; i++) {
+              if (tracks[i].label === (currentVideo.subtitles[0]?.label)) {
+                tracks[i].mode = 'showing';
+              } else {
+                tracks[i].mode = 'disabled';
+              }
+            }
           } catch (err) {
-            console.warn('[RoomView] Failed to add subtitle:', err);
+            console.error('[Subtitles] Failed to add tracks via Video.js API:', err);
           }
         });
       }
-
-      // Load video source
-      player.src({ src: hlsUrl, type: 'application/x-mpegURL' });
+      
       player.load();
+      
+      // Verify subtitles loaded
+      player.on('loadedmetadata', () => {
+        console.log('[Player] Metadata loaded');
+        const tracks = player.textTracks ? Array.from(player.textTracks() as any) as any[] : [];
+        console.log('[Player] Text tracks:', tracks.length);
 
-      // Event handlers (only for moderators/admins)
+        for (let i = 0; i < tracks.length; i++) {
+          console.log(`[Track ${i}]:`, {
+            kind: tracks[i].kind,
+            label: tracks[i].label,
+            language: tracks[i].language,
+            mode: tracks[i].mode,
+          });
+        }
+
+        // Enable first subtitle track by default
+        if (tracks.length > 0) {
+          tracks[0].mode = 'showing';
+        }
+      });
+
+      // Event handlers for moderators/admins
       if (isModOrAdmin) {
         let isPlayingBeforeSeek = false;
         
         const handlePlay = () => {
-          if (isServerActionRef.current) {
-            console.log('[Play Event] Skipped - server action');
-            return;
-          }
-          const t = player.currentTime();
-          console.log('[Play Event] Emitting video:play', t);
+            if (isServerActionRef.current) return;
+            const t = player.currentTime ? player.currentTime() : 0;
           socket?.emit?.('video:play', {
             room_id: roomId,
             guest_id: guest.id,
@@ -319,12 +443,8 @@ export default function RoomView({ roomId }: RoomViewProps) {
         };
 
         const handlePause = () => {
-          if (isServerActionRef.current) {
-            console.log('[Pause Event] Skipped - server action');
-            return;
-          }
-          const t = player.currentTime();
-          console.log('[Pause Event] Emitting video:pause', t);
+          if (isServerActionRef.current) return;
+          const t = player.currentTime ? player.currentTime() : 0;
           socket?.emit?.('video:pause', {
             room_id: roomId,
             guest_id: guest.id,
@@ -338,13 +458,9 @@ export default function RoomView({ roomId }: RoomViewProps) {
         };
 
         const handleSeeked = () => {
-          if (isServerActionRef.current) {
-            console.log('[Seeked Event] Skipped - server action');
-            return;
-          }
+          if (isServerActionRef.current) return;
           
-          const t = player.currentTime();
-          console.log('[Seeked Event] Emitting video:seek', t);
+          const t = player.currentTime ? player.currentTime() : 0;
           socket?.emit?.('video:seek', {
             room_id: roomId,
             guest_id: guest.id,
@@ -353,11 +469,11 @@ export default function RoomView({ roomId }: RoomViewProps) {
           
           setServerState((prev) => ({ ...prev, current_timestamp: t }));
           
-          // Resume playback if was playing before seek
           if (isPlayingBeforeSeek) {
             setTimeout(() => {
               isServerActionRef.current = true;
-              player.play().catch(() => {});
+              const playPromise = player.play ? player.play() : undefined;
+              if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(() => {});
               setTimeout(() => {
                 isServerActionRef.current = false;
               }, 200);
@@ -370,13 +486,13 @@ export default function RoomView({ roomId }: RoomViewProps) {
         player.on('seeking', handleSeeking);
         player.on('seeked', handleSeeked);
       } else {
-        // Viewers: prevent seeking forward beyond admin timestamp
+        // Viewers: prevent seeking ahead
         player.on('seeking', () => {
           if (isServerActionRef.current) return;
-          const t = player.currentTime();
-          const adminTime = getAdminTimestamp();
-          if (adminTime !== null && t > adminTime + 2) {
-            player.currentTime(adminTime);
+          const t = Number(player.currentTime ? player.currentTime() : 0);
+          const authTime = getAuthoritativeTimestamp();
+          if (authTime !== null && t > authTime + 2) {
+            player.currentTime(authTime);
             toast.error('Cannot seek ahead of moderator');
           }
         });
@@ -384,14 +500,13 @@ export default function RoomView({ roomId }: RoomViewProps) {
 
       player.on('timeupdate', () => {
         try {
-          setLocalTime(player.currentTime());
+          setLocalTime(Number(player.currentTime ? player.currentTime() : 0));
         } catch (e) {}
       });
 
-      console.log('[RoomView] Player created for video:', currentVideo?.id);
+      console.log('[Player] Created for video:', currentVideo?.id);
     }
 
-    // Cleanup
     return () => {
       if (broadcastIntervalRef.current) {
         clearInterval(broadcastIntervalRef.current);
@@ -411,16 +526,15 @@ export default function RoomView({ roomId }: RoomViewProps) {
     };
   }, [hlsUrl, currentVideo?.id, isModOrAdmin]);
 
-  // Broadcast current timestamp every 2 seconds (ALL users)
+  // Broadcast timestamp every 2 seconds (all users)
   useEffect(() => {
     if (!playerRef.current || !socket || !guest?.id) return;
 
-    broadcastIntervalRef.current = setInterval(() => {
+    const broadcast = () => {
       try {
         const currentTime = playerRef.current.currentTime();
         const isPlaying = !playerRef.current.paused();
 
-        // Broadcast to all users in room
         socket.emit('user:timestamp', {
           room_id: roomId,
           guest_id: guest.id,
@@ -439,8 +553,13 @@ export default function RoomView({ roomId }: RoomViewProps) {
           });
           return updated;
         });
-      } catch (e) {}
-    }, 2000);
+      } catch (e) {
+        console.error('[Broadcast] Error:', e);
+      }
+    };
+
+    broadcast();
+    broadcastIntervalRef.current = setInterval(broadcast, 2000);
 
     return () => {
       if (broadcastIntervalRef.current) {
@@ -461,21 +580,20 @@ export default function RoomView({ roomId }: RoomViewProps) {
     toast.success('Switched video');
   };
 
-  // Sync now button - sync to admin's CURRENT timestamp
+  // Sync now
   const syncNow = () => {
     if (!playerRef.current) return;
     
-    const adminTime = getAdminTimestamp();
-    if (adminTime === null) {
+    const authTime = getAuthoritativeTimestamp();
+    if (authTime === null) {
       toast.error('No moderator timestamp available');
       return;
     }
     
-    console.log('[SyncNow] Syncing to admin time:', adminTime);
     isServerActionRef.current = true;
     
     try {
-      playerRef.current.currentTime(adminTime);
+      playerRef.current.currentTime(authTime);
       
       if (serverState.is_playing) {
         playerRef.current.play().catch(() => {});
@@ -484,6 +602,7 @@ export default function RoomView({ roomId }: RoomViewProps) {
       }
       
       setNeedsSync(false);
+      setSyncDelta(null);
       toast.success('Synced!');
     } catch (e) {
       console.error('[SyncNow] Failed:', e);
@@ -496,33 +615,64 @@ export default function RoomView({ roomId }: RoomViewProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-white p-4 flex items-center justify-between shadow-sm">
+      <header className="border-b border-border bg-card p-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold">Room: {roomId.slice(0, 8)}...</h1>
+          <h1 className="text-xl font-bold text-foreground">Room: {roomId.slice(0, 8)}...</h1>
           <span
-            className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-              guest?.role === 'admin'
-                ? 'bg-red-100 text-red-800'
+            className={`px-3 py-1 rounded-full text-xs font-semibold uppercase`}
+            style={{
+              backgroundColor: guest?.role === 'admin'
+                ? 'oklch(0.68 0.26 25 / 0.15)'
                 : guest?.role === 'moderator'
-                ? 'bg-yellow-100 text-yellow-800'
-                : 'bg-blue-100 text-blue-800'
-            }`}
+                ? 'oklch(0.75 0.15 85 / 0.15)'
+                : 'oklch(0.60 0.20 265 / 0.15)',
+              color: guest?.role === 'admin'
+                ? 'oklch(0.68 0.26 25)'
+                : guest?.role === 'moderator'
+                ? 'oklch(0.55 0.15 85)'
+                : 'oklch(0.60 0.20 265)',
+            }}
           >
             {guest?.role || 'Loading'}
           </span>
 
+          {/* Sync indicator for viewers */}
           {needsSync && !isModOrAdmin && syncDelta !== null && (
-            <div className="flex items-center gap-2 ml-4 bg-orange-50 px-4 py-2 rounded-lg border border-orange-300">
+            <div 
+              className="flex items-center gap-3 ml-4 px-4 py-2.5 rounded-lg border-2 shadow-md animate-pulse"
+              style={{
+                backgroundColor: 'oklch(0.98 0.08 35)',
+                borderColor: 'oklch(0.65 0.25 35)',
+              }}
+            >
               <div className="flex flex-col">
-                <span className="text-sm font-bold text-orange-700">
-                  {syncDelta > 0 ? `${Math.abs(Math.round(syncDelta))}s behind` : `${Math.abs(Math.round(syncDelta))}s ahead`}
+                <span 
+                  className="text-sm font-bold"
+                  style={{ color: 'oklch(0.50 0.20 35)' }}
+                >
+                  {syncDelta > 0 
+                    ? `${Math.abs(Math.round(syncDelta))}s behind` 
+                    : `${Math.abs(Math.round(syncDelta))}s ahead`}
                 </span>
-                <span className="text-xs text-orange-600">moderator</span>
+                <span 
+                  className="text-xs"
+                  style={{ color: 'oklch(0.55 0.15 35)' }}
+                >
+                  moderator
+                </span>
               </div>
-              <Button size="sm" variant="default" onClick={syncNow} className="bg-orange-600 hover:bg-orange-700 text-white">
-                Sync
+              <Button 
+                size="sm" 
+                onClick={syncNow}
+                style={{
+                  backgroundColor: 'oklch(0.65 0.25 35)',
+                  color: 'oklch(0.99 0 0)',
+                }}
+                className="hover:opacity-90 transition-opacity font-semibold"
+              >
+                Sync Now
               </Button>
             </div>
           )}
@@ -534,24 +684,29 @@ export default function RoomView({ roomId }: RoomViewProps) {
                   Playlist
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full max-w-md overflow-y-auto">
+              <SheetContent side="right" className="w-full max-w-md overflow-y-auto bg-popover border-border">
                 <SheetHeader>
-                  <SheetTitle>Video Playlist</SheetTitle>
+                  <SheetTitle className="text-popover-foreground">Video Playlist</SheetTitle>
                 </SheetHeader>
                 {loadingPlaylist ? (
-                  <div className="p-8 text-center text-gray-500">Loading...</div>
+                  <div className="p-8 text-center text-muted-foreground">Loading...</div>
                 ) : (
-                  <ul className="mt-4 divide-y">
+                  <ul className="mt-4 divide-y divide-border">
                     {playlist.map((video) => (
                       <li key={video.id} className="flex items-center justify-between py-3">
                         <div className="flex-1">
-                          <div className="font-semibold">{video.title}</div>
-                          <div className="text-xs text-gray-500">
+                          <div className="font-semibold text-popover-foreground">{video.title}</div>
+                          <div className="text-xs text-muted-foreground">
                             {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}
                           </div>
                         </div>
                         {serverState.current_video_id === video.id ? (
-                          <span className="text-green-600 font-bold text-sm">Playing</span>
+                          <span 
+                            className="text-sm font-bold"
+                            style={{ color: 'oklch(0.68 0.22 145)' }}
+                          >
+                            Playing
+                          </span>
                         ) : (
                           <Button size="sm" onClick={() => handleSwitchVideo(video.id)}>
                             Play
@@ -569,20 +724,72 @@ export default function RoomView({ roomId }: RoomViewProps) {
       </header>
 
       {/* Video Player */}
-      <div className="flex-1 bg-black flex items-center justify-center">
+      <div className="flex-1 bg-black flex items-center justify-center relative">
         <div ref={videoContainerRef} className="w-full max-w-5xl aspect-video" />
+        
+        {/* Subtitle indicator */}
+        {currentVideo?.subtitles && currentVideo.subtitles.length > 0 && (
+          <div className="absolute top-4 right-4 bg-black/70 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+            </svg>
+            <span>{currentVideo.subtitles.length} subtitle{currentVideo.subtitles.length > 1 ? 's' : ''}</span>
+          </div>
+        )}
+
+        {/* Quality selector (auto or specific variant) */}
+        {qualities.length > 0 && (
+          <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-2">
+            <label className="text-xs mr-2">Quality</label>
+            <select
+              value={selectedQuality}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedQuality(val);
+                try {
+                  if (val === 'Auto') {
+                    // switch back to master playlist
+                    playerRef.current?.src({ src: hlsUrl, type: 'application/x-mpegURL' });
+                  } else {
+                    const q = qualities.find((q) => q.label === val);
+                    if (q) {
+                      const wasPlaying = !playerRef.current?.paused?.();
+                      const currTime = playerRef.current?.currentTime ? playerRef.current.currentTime() : 0;
+                      playerRef.current?.src({ src: q.uri, type: 'application/x-mpegURL' });
+                      // try to seek to previous time and play if was playing
+                      playerRef.current?.ready(() => {
+                        try {
+                          playerRef.current.currentTime(currTime);
+                          if (wasPlaying) playerRef.current.play().catch(() => {});
+                        } catch (e) {}
+                      });
+                    }
+                  }
+                } catch (e) {
+                  console.warn('[Quality] Switch failed', e);
+                }
+              }}
+              className="bg-transparent text-white text-xs"
+            >
+              <option value="Auto">Auto</option>
+              {qualities.map((q) => (
+                <option key={q.uri} value={q.label}>{q.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Chat Placeholder */}
-      <div className="border-t bg-white p-4">
+      <div className="border-t border-border bg-card p-4">
         {guest?.permissions.can_chat ? (
           <input
             type="text"
             placeholder="Type a message..."
-            className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-input bg-background text-foreground rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
           />
         ) : (
-          <p className="text-center text-gray-500">Chat disabled by moderator</p>
+          <p className="text-center text-muted-foreground">Chat disabled by moderator</p>
         )}
       </div>
     </div>
