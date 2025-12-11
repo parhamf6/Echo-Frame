@@ -16,34 +16,30 @@ interface RoomViewProps {
   roomId: string;
 }
 
-interface ServerState {
+interface VideoState {
   current_video_id?: string;
-  current_timestamp?: number;
   is_playing?: boolean;
+  current_timestamp?: number;
   last_updated?: string;
+  controlled_by?: string;
 }
 
-interface UserTimestamp {
+interface ViewerRequest {
+  id: string;
+  type: 'pause' | 'rewind' | 'quick_message';
   guest_id: string;
-  timestamp: number;
-  is_playing: boolean;
-  updated_at: number;
+  username: string;
+  room_id: string;
+  timestamp: string;
+  seconds?: number;
+  message?: string;
 }
 
-// Get full URL for video resources
 const getVideoUrl = (path: string): string => {
   if (!path) return '';
-
-  // Fix common malformed prefixes (some stored paths may have 'http//' instead of 'http://')
   if (path.startsWith('http//')) path = path.replace(/^http:\/\//, 'http://');
   if (path.startsWith('https//')) path = path.replace(/^https:\/\//, 'https://');
-
-  // If already an absolute URL (http(s)://) or protocol-relative (//), return it as-is
-  if (/^https?:\/\//i.test(path) || /^\/\//.test(path)) {
-    return path;
-  }
-
-  // Otherwise treat as a relative path and prefix with configured NGINX URL
+  if (/^https?:\/\//i.test(path) || /^\/\//.test(path)) return path;
   const nginxUrl = (process.env.NEXT_PUBLIC_NGINX_URL || 'http://echoframe-nginx.com').replace(/\/$/, '');
   if (!path.startsWith('/')) path = `/${path}`;
   return `${nginxUrl}${path}`;
@@ -53,10 +49,13 @@ export default function RoomView({ roomId }: RoomViewProps) {
   const { guest } = useGuestStore();
   const [userListVersion, setUserListVersion] = useState(0);
   
-  const [serverState, setServerState] = useState<ServerState>({});
-  const [localTime, setLocalTime] = useState<number>(0);
-  const [userTimestamps, setUserTimestamps] = useState<Map<string, UserTimestamp>>(new Map());
-
+  // Video state from server
+  const [videoState, setVideoState] = useState<VideoState>({});
+  
+  // Requests
+  const [pendingRequests, setPendingRequests] = useState<ViewerRequest[]>([]);
+  const [lastRequestTime, setLastRequestTime] = useState<number>(0);
+  
   const [playlistOpen, setPlaylistOpen] = useState(false);
   const [playlist, setPlaylist] = useState<Video[]>([]);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
@@ -66,14 +65,13 @@ export default function RoomView({ roomId }: RoomViewProps) {
   const videoContainerRef = useRef<HTMLDivElement | null>(null);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<any>(null);
-  const isServerActionRef = useRef(false);
-  const broadcastIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const applyingStateRef = useRef(false);
 
-  const isModOrAdmin = guest?.role === 'admin' || guest?.role === 'moderator';
-  const currentVideo = playlist.find((v) => v.id === serverState.current_video_id) || playlist[0];
+  const isAdminOrMod = guest?.role === 'admin' || guest?.role === 'moderator';
+  const currentVideo = playlist.find((v) => v.id === videoState.current_video_id) || playlist[0];
   const hlsUrl = currentVideo?.hls_manifest_path ? getVideoUrl(currentVideo.hls_manifest_path) : '';
 
-  // Parse master manifest to discover available qualities
+  // Parse master manifest
   const parseMasterManifest = (text: string, baseUrl: string) => {
     const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const variants: Array<{ label: string; uri: string; resolution?: string; bandwidth?: number }> = [];
@@ -81,7 +79,6 @@ export default function RoomView({ roomId }: RoomViewProps) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (line.startsWith('#EXT-X-STREAM-INF')) {
-        // parse attributes
         const attrsPart = line.split(':')[1] || '';
         const attrs: Record<string, string> = {};
         attrsPart.split(',').forEach((pair) => {
@@ -91,7 +88,6 @@ export default function RoomView({ roomId }: RoomViewProps) {
 
         const uriLine = lines[i + 1];
         if (!uriLine) continue;
-        // resolve relative URI against base
         let resolved = uriLine;
         try {
           resolved = new URL(uriLine, baseUrl).toString();
@@ -108,70 +104,6 @@ export default function RoomView({ roomId }: RoomViewProps) {
     return variants;
   };
 
-  const SYNC_THRESHOLD = 2.5;
-  const [syncDelta, setSyncDelta] = useState<number | null>(null);
-  const [needsSync, setNeedsSync] = useState(false);
-
-  // Find the most authoritative timestamp (admin/mod who's most recently updated)
-  const getAuthoritativeTimestamp = (): number | null => {
-    if (isModOrAdmin) return null; // Mods don't need to sync
-
-    let bestTimestamp: UserTimestamp | null = null;
-    let mostRecent = 0;
-
-    for (const [guestId, data] of userTimestamps.entries()) {
-      if (guestId === guest?.id) continue; // Skip self
-      
-      // Only consider timestamps updated in last 5 seconds
-      const age = Date.now() - data.updated_at;
-      if (age > 5000) continue;
-
-      if (data.updated_at > mostRecent) {
-        mostRecent = data.updated_at;
-        bestTimestamp = data;
-      }
-    }
-
-    if (!bestTimestamp) return null;
-
-    // Calculate current position if playing
-    if (bestTimestamp.is_playing) {
-      const elapsed = (Date.now() - bestTimestamp.updated_at) / 1000;
-      return bestTimestamp.timestamp + elapsed;
-    }
-
-    return bestTimestamp.timestamp;
-  };
-
-  // Continuous sync monitoring for viewers
-  useEffect(() => {
-    if (isModOrAdmin || !playerRef.current) return;
-
-    const checkSync = () => {
-      try {
-        const myTime = playerRef.current.currentTime();
-        const authTime = getAuthoritativeTimestamp();
-        
-        if (authTime !== null) {
-          const delta = authTime - myTime;
-          setSyncDelta(delta);
-          setNeedsSync(Math.abs(delta) > SYNC_THRESHOLD);
-        } else {
-          setSyncDelta(null);
-          setNeedsSync(false);
-        }
-      } catch (e) {
-        console.error('[SyncCheck] Error:', e);
-      }
-    };
-
-    // Check immediately and then every 500ms
-    checkSync();
-    const interval = setInterval(checkSync, 500);
-
-    return () => clearInterval(interval);
-  }, [isModOrAdmin, userTimestamps, guest?.id]);
-
   // Fetch playlist
   useEffect(() => {
     if (playlist.length === 0 || playlistOpen) {
@@ -179,122 +111,115 @@ export default function RoomView({ roomId }: RoomViewProps) {
       videosApi.getPlaylist()
         .then((res) => {
           setPlaylist(res.videos);
-          if (!serverState.current_video_id && res.videos.length > 0) {
-            setServerState((prev) => ({ ...prev, current_video_id: res.videos[0].id }));
-          }
         })
         .catch(() => toast.error('Failed to load playlist'))
         .finally(() => setLoadingPlaylist(false));
     }
   }, [playlistOpen]);
 
+  // Handle viewer requests
+  const handleViewerRequest = (request: ViewerRequest) => {
+    if (!isAdminOrMod) return;
+    
+    // Add to pending requests
+    setPendingRequests((prev) => {
+      // Remove duplicates from same user
+      const filtered = prev.filter(r => r.guest_id !== request.guest_id || r.type !== request.type);
+      return [...filtered, request];
+    });
+    
+    // Show toast notification
+    if (request.type === 'pause') {
+      toast(`${request.username} requested pause`, {
+        action: {
+          label: 'Pause Now',
+          onClick: () => approveRequest(request.id)
+        },
+        duration: 10000
+      });
+    } else if (request.type === 'rewind') {
+      toast(`${request.username} wants to go back ${request.seconds}s`, {
+        action: {
+          label: 'Rewind',
+          onClick: () => approveRequest(request.id)
+        },
+        duration: 10000
+      });
+    } else if (request.type === 'quick_message') {
+      toast(`${request.username}: ${request.message}`, {
+        duration: 5000
+      });
+    }
+  };
+
   // Socket connection
   const socket = useSocket({
     roomId,
     guestId: guest?.id || '',
+    username: guest?.username || 'User',
+    role: guest?.role || 'viewer',
     onUserListUpdate: () => setUserListVersion((v) => v + 1),
-    onVideoState: (state: ServerState) => {
-      console.log('[Socket] onVideoState', state);
-      setServerState(state);
+    onVideoState: (state: VideoState) => {
+      console.log('[RoomView] Received video_state', state);
+      setVideoState(state);
     },
     onVideoSwitch: (videoId: string) => {
-      console.log('[Socket] onVideoSwitch', videoId);
-      setServerState((prev) => ({ ...prev, current_video_id: videoId }));
+      console.log('[RoomView] Video switched to', videoId);
     },
-    onVideoPlay: (data: any) => {
-      console.log('[Socket] onVideoPlay', data);
-      setServerState((prev) => ({
-        ...prev,
-        is_playing: true,
-        current_timestamp: data.current_timestamp,
-      }));
+    onViewerRequest: handleViewerRequest,
+    onRequestApproved: (data) => {
+      setPendingRequests((prev) => prev.filter(r => r.id !== data.request_id));
     },
-    onVideoPause: (data: any) => {
-      console.log('[Socket] onVideoPause', data);
-      setServerState((prev) => ({
-        ...prev,
-        is_playing: false,
-        current_timestamp: data.current_timestamp,
-      }));
-    },
-    onVideoSeek: (data: any) => {
-      console.log('[Socket] onVideoSeek', data);
-      setServerState((prev) => ({
-        ...prev,
-        current_timestamp: data.current_timestamp,
-      }));
+    onRequestDismissed: (data) => {
+      setPendingRequests((prev) => prev.filter(r => r.id !== data.request_id));
     },
   });
 
-  // Listen for user timestamp broadcasts
+  // Apply video state to player (Slave mode)
   useEffect(() => {
-    if (!socket) return;
-
-    const handleUserTimestamp = (data: { guest_id: string; timestamp: number; is_playing: boolean }) => {
-      setUserTimestamps((prev) => {
-        const updated = new Map(prev);
-        updated.set(data.guest_id, {
-          guest_id: data.guest_id,
-          timestamp: data.timestamp,
-          is_playing: data.is_playing,
-          updated_at: Date.now(),
-        });
-        return updated;
-      });
-    };
-
-    socket.on('user_timestamp', handleUserTimestamp);
-
-    return () => {
-      socket.off('user_timestamp', handleUserTimestamp);
-    };
-  }, [socket]);
-
-  // Apply server state to player
-  useEffect(() => {
-    if (!playerRef.current || !serverState) return;
+    if (!playerRef.current || !videoState || applyingStateRef.current) return;
 
     const applyState = async () => {
-      isServerActionRef.current = true;
+      applyingStateRef.current = true;
 
       try {
-        if (typeof serverState.current_timestamp === 'number') {
-          const currentTime = playerRef.current.currentTime();
-          const delta = Math.abs(currentTime - serverState.current_timestamp);
-          
-          if (delta > 1) {
-            playerRef.current.currentTime(serverState.current_timestamp);
-          }
+        const currentTime = playerRef.current.currentTime();
+        const targetTime = videoState.current_timestamp || 0;
+        const timeDiff = Math.abs(currentTime - targetTime);
+
+        // Seek if difference > 1 second
+        if (timeDiff > 1) {
+          console.log(`[Slave] Seeking from ${currentTime.toFixed(2)}s to ${targetTime.toFixed(2)}s`);
+          playerRef.current.currentTime(targetTime);
         }
 
-        if (typeof serverState.is_playing === 'boolean') {
-          if (serverState.is_playing) {
-            const playPromise = playerRef.current.play();
-            if (playPromise !== undefined) {
-              await playPromise.catch((e: any) => console.warn('[ApplyState] Play failed:', e));
-            }
-          } else {
-            playerRef.current.pause();
-          }
+        // Match play state
+        const isPlaying = !playerRef.current.paused();
+        if (videoState.is_playing && !isPlaying) {
+          console.log('[Slave] Playing video');
+          await playerRef.current.play().catch((e: any) => console.warn('Play failed:', e));
+        } else if (!videoState.is_playing && isPlaying) {
+          console.log('[Slave] Pausing video');
+          playerRef.current.pause();
         }
       } catch (e) {
-        console.warn('[ApplyState] Failed', e);
+        console.error('[Slave] Failed to apply state:', e);
       } finally {
         setTimeout(() => {
-          isServerActionRef.current = false;
-        }, 200);
+          applyingStateRef.current = false;
+        }, 500);
       }
     };
 
     applyState();
-  }, [serverState.current_timestamp, serverState.is_playing]);
+  }, [videoState]);
 
-  // Initialize Video.js player with subtitles
+  // Initialize Video.js player
   useEffect(() => {
     if (!videoContainerRef.current || !hlsUrl) return;
 
     // Destroy existing player if video changed
-    if (playerRef.current && serverState.current_video_id !== currentVideo?.id) {
+    if (playerRef.current && videoState.current_video_id !== currentVideo?.id) {
       try {
         playerRef.current.dispose();
         playerRef.current = null;
@@ -309,7 +234,7 @@ export default function RoomView({ roomId }: RoomViewProps) {
       const videoEl = document.createElement('video');
       videoEl.className = 'video-js vjs-big-play-centered';
       videoEl.setAttribute('playsinline', '');
-      videoEl.setAttribute('crossorigin', 'anonymous'); // Required for subtitles
+      videoEl.setAttribute('crossorigin', 'anonymous');
 
       videoContainerRef.current.appendChild(videoEl);
       videoElRef.current = videoEl;
@@ -320,8 +245,8 @@ export default function RoomView({ roomId }: RoomViewProps) {
         preload: 'auto',
         fluid: true,
         controlBar: {
-          playToggle: isModOrAdmin,
-          progressControl: isModOrAdmin,
+          playToggle: isAdminOrMod, // Only admin/mod can use play button
+          progressControl: isAdminOrMod, // Only admin/mod can seek
           remainingTimeDisplay: true,
           fullscreenToggle: true,
           volumePanel: true,
@@ -332,13 +257,12 @@ export default function RoomView({ roomId }: RoomViewProps) {
 
       playerRef.current = player;
 
-      // Set video source (initially Master playlist)
       player.src({
         src: hlsUrl,
         type: 'application/x-mpegURL',
       });
 
-      // Fetch master manifest to discover variant playlists (qualities)
+      // Fetch master manifest
       if (hlsUrl) {
         fetch(hlsUrl)
           .then((res) => res.text())
@@ -347,7 +271,6 @@ export default function RoomView({ roomId }: RoomViewProps) {
               const variants = parseMasterManifest(text, hlsUrl);
               if (variants.length) {
                 setQualities(variants);
-                // keep default selection as Auto (master)
               }
             } catch (e) {
               console.warn('[HLS] Failed to parse master manifest', e);
@@ -358,21 +281,14 @@ export default function RoomView({ roomId }: RoomViewProps) {
           });
       }
 
-      // Add subtitle tracks using Video.js API to ensure the control menu appears
+      // Add subtitles
       if (currentVideo?.subtitles?.length) {
-        console.log('[Subtitles] Adding', currentVideo.subtitles.length, 'tracks via Video.js API');
-
-        // Wait until player is ready
         player.ready(() => {
           try {
-            // Remove existing remote text tracks to avoid duplicates on video switch
             const existing = player.remoteTextTracks ? Array.from(player.remoteTextTracks() as any) : [];
-            if (existing.length) {
-              // remove from the end so indexes remain valid
-              existing.reverse().forEach((t: any) => {
-                try { player.removeRemoteTextTrack(t); } catch (e) {}
-              });
-            }
+            existing.reverse().forEach((t: any) => {
+              try { player.removeRemoteTextTrack(t); } catch (e) {}
+            });
 
             currentVideo.subtitles.forEach((subtitle: any, index: number) => {
               const src = getVideoUrl(subtitle.file_path);
@@ -384,133 +300,90 @@ export default function RoomView({ roomId }: RoomViewProps) {
                 default: index === 0,
               } as any;
 
-              // Use addRemoteTextTrack so Video.js creates the menu entries
-              const added = player.addRemoteTextTrack(options, false);
-              console.log('[Subtitles] Added via API:', options.label, 'at', src, { added });
+              player.addRemoteTextTrack(options, false);
             });
 
-            // Ensure first track showing if default
             const tracks = player.textTracks ? Array.from(player.textTracks() as any) as any[] : [];
             for (let i = 0; i < tracks.length; i++) {
-              if (tracks[i].label === (currentVideo.subtitles[0]?.label)) {
+              if (i === 0) {
                 tracks[i].mode = 'showing';
               } else {
                 tracks[i].mode = 'disabled';
               }
             }
           } catch (err) {
-            console.error('[Subtitles] Failed to add tracks via Video.js API:', err);
+            console.error('[Subtitles] Failed to add tracks:', err);
           }
         });
       }
       
       player.load();
-      
-      // Verify subtitles loaded
-      player.on('loadedmetadata', () => {
-        console.log('[Player] Metadata loaded');
-        const tracks = player.textTracks ? Array.from(player.textTracks() as any) as any[] : [];
-        console.log('[Player] Text tracks:', tracks.length);
 
-        for (let i = 0; i < tracks.length; i++) {
-          console.log(`[Track ${i}]:`, {
-            kind: tracks[i].kind,
-            label: tracks[i].label,
-            language: tracks[i].language,
-            mode: tracks[i].mode,
-          });
-        }
-
-        // Enable first subtitle track by default
-        if (tracks.length > 0) {
-          tracks[0].mode = 'showing';
-        }
-      });
-
-      // Event handlers for moderators/admins
-      if (isModOrAdmin) {
-        let isPlayingBeforeSeek = false;
-        
+      // Admin/Mod event handlers
+      if (isAdminOrMod) {
         const handlePlay = () => {
-            if (isServerActionRef.current) return;
-            const t = player.currentTime ? player.currentTime() : 0;
+          if (applyingStateRef.current) return;
+          const t = player.currentTime ? player.currentTime() : 0;
           socket?.emit?.('video:play', {
             room_id: roomId,
             guest_id: guest.id,
-            current_timestamp: t,
+            timestamp: t
           });
-          setServerState((prev) => ({ ...prev, is_playing: true, current_timestamp: t }));
         };
 
         const handlePause = () => {
-          if (isServerActionRef.current) return;
+          if (applyingStateRef.current) return;
           const t = player.currentTime ? player.currentTime() : 0;
           socket?.emit?.('video:pause', {
             room_id: roomId,
             guest_id: guest.id,
-            current_timestamp: t,
+            timestamp: t
           });
-          setServerState((prev) => ({ ...prev, is_playing: false, current_timestamp: t }));
-        };
-
-        const handleSeeking = () => {
-          isPlayingBeforeSeek = !player.paused();
         };
 
         const handleSeeked = () => {
-          if (isServerActionRef.current) return;
-          
+          if (applyingStateRef.current) return;
           const t = player.currentTime ? player.currentTime() : 0;
           socket?.emit?.('video:seek', {
             room_id: roomId,
             guest_id: guest.id,
-            current_timestamp: t,
+            timestamp: t
           });
-          
-          setServerState((prev) => ({ ...prev, current_timestamp: t }));
-          
-          if (isPlayingBeforeSeek) {
-            setTimeout(() => {
-              isServerActionRef.current = true;
-              const playPromise = player.play ? player.play() : undefined;
-              if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(() => {});
-              setTimeout(() => {
-                isServerActionRef.current = false;
-              }, 200);
-            }, 100);
-          }
         };
 
         player.on('play', handlePlay);
         player.on('pause', handlePause);
-        player.on('seeking', handleSeeking);
         player.on('seeked', handleSeeked);
       } else {
-        // Viewers: prevent seeking ahead
-        player.on('seeking', () => {
-          if (isServerActionRef.current) return;
-          const t = Number(player.currentTime ? player.currentTime() : 0);
-          const authTime = getAuthoritativeTimestamp();
-          if (authTime !== null && t > authTime + 2) {
-            player.currentTime(authTime);
-            toast.error('Cannot seek ahead of moderator');
+        // Viewers: prevent manual control
+        player.on('play', (e) => {
+          if (!applyingStateRef.current) {
+            e.preventDefault();
+            player.pause();
+            toast.error('Only moderators can control playback');
+          }
+        });
+
+        player.on('pause', (e) => {
+          if (!applyingStateRef.current && videoState.is_playing) {
+            e.preventDefault();
+            player.play();
+          }
+        });
+
+        player.on('seeking', (e) => {
+          if (!applyingStateRef.current) {
+            e.preventDefault();
+            player.currentTime(videoState.current_timestamp || 0);
+            toast.error('Only moderators can seek');
           }
         });
       }
-
-      player.on('timeupdate', () => {
-        try {
-          setLocalTime(Number(player.currentTime ? player.currentTime() : 0));
-        } catch (e) {}
-      });
 
       console.log('[Player] Created for video:', currentVideo?.id);
     }
 
     return () => {
-      if (broadcastIntervalRef.current) {
-        clearInterval(broadcastIntervalRef.current);
-      }
       if (playerRef.current) {
         try {
           playerRef.current.dispose();
@@ -524,53 +397,11 @@ export default function RoomView({ roomId }: RoomViewProps) {
         videoElRef.current = null;
       }
     };
-  }, [hlsUrl, currentVideo?.id, isModOrAdmin]);
-
-  // Broadcast timestamp every 2 seconds (all users)
-  useEffect(() => {
-    if (!playerRef.current || !socket || !guest?.id) return;
-
-    const broadcast = () => {
-      try {
-        const currentTime = playerRef.current.currentTime();
-        const isPlaying = !playerRef.current.paused();
-
-        socket.emit('user:timestamp', {
-          room_id: roomId,
-          guest_id: guest.id,
-          timestamp: currentTime,
-          is_playing: isPlaying,
-        });
-
-        // Update local tracking
-        setUserTimestamps((prev) => {
-          const updated = new Map(prev);
-          updated.set(guest.id, {
-            guest_id: guest.id,
-            timestamp: currentTime,
-            is_playing: isPlaying,
-            updated_at: Date.now(),
-          });
-          return updated;
-        });
-      } catch (e) {
-        console.error('[Broadcast] Error:', e);
-      }
-    };
-
-    broadcast();
-    broadcastIntervalRef.current = setInterval(broadcast, 2000);
-
-    return () => {
-      if (broadcastIntervalRef.current) {
-        clearInterval(broadcastIntervalRef.current);
-      }
-    };
-  }, [socket, guest?.id, roomId]);
+  }, [hlsUrl, currentVideo?.id, isAdminOrMod]);
 
   // Handle video switch
   const handleSwitchVideo = (videoId: string) => {
-    if (!isModOrAdmin) return;
+    if (!isAdminOrMod) return;
     socket?.emit?.('video:switch', {
       room_id: roomId,
       guest_id: guest.id,
@@ -580,38 +411,78 @@ export default function RoomView({ roomId }: RoomViewProps) {
     toast.success('Switched video');
   };
 
-  // Sync now
-  const syncNow = () => {
-    if (!playerRef.current) return;
-    
-    const authTime = getAuthoritativeTimestamp();
-    if (authTime === null) {
-      toast.error('No moderator timestamp available');
+  // Viewer request handlers
+  const requestPause = () => {
+    const now = Date.now();
+    if (now - lastRequestTime < 10000) {
+      toast.error('Please wait before sending another request');
       return;
     }
-    
-    isServerActionRef.current = true;
-    
-    try {
-      playerRef.current.currentTime(authTime);
-      
-      if (serverState.is_playing) {
-        playerRef.current.play().catch(() => {});
-      } else {
-        playerRef.current.pause();
-      }
-      
-      setNeedsSync(false);
-      setSyncDelta(null);
-      toast.success('Synced!');
-    } catch (e) {
-      console.error('[SyncNow] Failed:', e);
-      toast.error('Sync failed');
-    } finally {
-      setTimeout(() => {
-        isServerActionRef.current = false;
-      }, 200);
+
+    socket?.emit?.('request:pause', {
+      room_id: roomId,
+      guest_id: guest.id,
+      username: guest.username || 'User'
+    });
+    setLastRequestTime(now);
+  };
+
+  const requestRewind = (seconds: number) => {
+    const now = Date.now();
+    if (now - lastRequestTime < 10000) {
+      toast.error('Please wait before sending another request');
+      return;
     }
+
+    socket?.emit?.('request:rewind', {
+      room_id: roomId,
+      guest_id: guest.id,
+      username: guest.username || 'User',
+      seconds
+    });
+    setLastRequestTime(now);
+  };
+
+  const sendQuickMessage = (message: string) => {
+    socket?.emit?.('request:message', {
+      room_id: roomId,
+      guest_id: guest.id,
+      username: guest.username || 'User',
+      message
+    });
+  };
+
+  // Approve/dismiss requests
+  const approveRequest = (requestId: string) => {
+    socket?.emit?.('approve:request', {
+      request_id: requestId,
+      room_id: roomId,
+      guest_id: guest.id
+    });
+  };
+
+  const dismissRequest = (requestId: string) => {
+    socket?.emit?.('dismiss:request', {
+      request_id: requestId,
+      room_id: roomId,
+      guest_id: guest.id
+    });
+  };
+
+  // Quick rewind buttons (for admin/mod)
+  const quickRewind = (seconds: number) => {
+    if (!playerRef.current) return;
+    const currentTime = playerRef.current.currentTime();
+    const newTime = Math.max(0, currentTime - seconds);
+    playerRef.current.currentTime(newTime);
+  };
+
+  const quickForward = (seconds: number) => {
+    if (!playerRef.current) return;
+    const currentTime = playerRef.current.currentTime();
+    const duration = playerRef.current.duration();
+    const newTime = Math.min(duration, currentTime + seconds);
+    playerRef.current.currentTime(newTime);
   };
 
   return (
@@ -638,46 +509,7 @@ export default function RoomView({ roomId }: RoomViewProps) {
             {guest?.role || 'Loading'}
           </span>
 
-          {/* Sync indicator for viewers */}
-          {needsSync && !isModOrAdmin && syncDelta !== null && (
-            <div 
-              className="flex items-center gap-3 ml-4 px-4 py-2.5 rounded-lg border-2 shadow-md animate-pulse"
-              style={{
-                backgroundColor: 'oklch(0.98 0.08 35)',
-                borderColor: 'oklch(0.65 0.25 35)',
-              }}
-            >
-              <div className="flex flex-col">
-                <span 
-                  className="text-sm font-bold"
-                  style={{ color: 'oklch(0.50 0.20 35)' }}
-                >
-                  {syncDelta > 0 
-                    ? `${Math.abs(Math.round(syncDelta))}s behind` 
-                    : `${Math.abs(Math.round(syncDelta))}s ahead`}
-                </span>
-                <span 
-                  className="text-xs"
-                  style={{ color: 'oklch(0.55 0.15 35)' }}
-                >
-                  moderator
-                </span>
-              </div>
-              <Button 
-                size="sm" 
-                onClick={syncNow}
-                style={{
-                  backgroundColor: 'oklch(0.65 0.25 35)',
-                  color: 'oklch(0.99 0 0)',
-                }}
-                className="hover:opacity-90 transition-opacity font-semibold"
-              >
-                Sync Now
-              </Button>
-            </div>
-          )}
-
-          {isModOrAdmin && (
+          {isAdminOrMod && (
             <Sheet open={playlistOpen} onOpenChange={setPlaylistOpen}>
               <SheetTrigger asChild>
                 <Button variant="outline" size="sm">
@@ -700,7 +532,7 @@ export default function RoomView({ roomId }: RoomViewProps) {
                             {Math.floor(video.duration_seconds / 60)}:{String(video.duration_seconds % 60).padStart(2, '0')}
                           </div>
                         </div>
-                        {serverState.current_video_id === video.id ? (
+                        {videoState.current_video_id === video.id ? (
                           <span 
                             className="text-sm font-bold"
                             style={{ color: 'oklch(0.68 0.22 145)' }}
@@ -723,6 +555,61 @@ export default function RoomView({ roomId }: RoomViewProps) {
         <SettingsModal userListVersion={userListVersion} />
       </header>
 
+      {/* Pending Requests Bar (Admin/Mod only) */}
+      {isAdminOrMod && pendingRequests.length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-yellow-900 dark:text-yellow-100">
+              📬 Pending Requests ({pendingRequests.length})
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                pendingRequests.forEach(req => dismissRequest(req.id));
+              }}
+              className="text-xs"
+            >
+              Clear All
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {pendingRequests.slice(0, 3).map((request) => (
+              <div
+                key={request.id}
+                className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-lg p-2 text-sm"
+              >
+                <div className="flex-1">
+                  <span className="font-medium">{request.username}:</span>{' '}
+                  {request.type === 'pause' && 'Wants to pause'}
+                  {request.type === 'rewind' && `Go back ${request.seconds}s`}
+                  <span className="text-xs text-muted-foreground ml-2">
+                    {Math.floor((Date.now() - new Date(request.timestamp).getTime()) / 1000)}s ago
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => approveRequest(request.id)}
+                    className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                  >
+                    {request.type === 'pause' ? 'Pause' : 'Rewind'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => dismissRequest(request.id)}
+                    className="text-xs"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Video Player */}
       <div className="flex-1 bg-black flex items-center justify-center relative">
         <div ref={videoContainerRef} className="w-full max-w-5xl aspect-video" />
@@ -737,7 +624,7 @@ export default function RoomView({ roomId }: RoomViewProps) {
           </div>
         )}
 
-        {/* Quality selector (auto or specific variant) */}
+        {/* Quality selector */}
         {qualities.length > 0 && (
           <div className="absolute top-4 left-4 bg-black/70 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-2">
             <label className="text-xs mr-2">Quality</label>
@@ -748,7 +635,6 @@ export default function RoomView({ roomId }: RoomViewProps) {
                 setSelectedQuality(val);
                 try {
                   if (val === 'Auto') {
-                    // switch back to master playlist
                     playerRef.current?.src({ src: hlsUrl, type: 'application/x-mpegURL' });
                   } else {
                     const q = qualities.find((q) => q.label === val);
@@ -756,7 +642,6 @@ export default function RoomView({ roomId }: RoomViewProps) {
                       const wasPlaying = !playerRef.current?.paused?.();
                       const currTime = playerRef.current?.currentTime ? playerRef.current.currentTime() : 0;
                       playerRef.current?.src({ src: q.uri, type: 'application/x-mpegURL' });
-                      // try to seek to previous time and play if was playing
                       playerRef.current?.ready(() => {
                         try {
                           playerRef.current.currentTime(currTime);
@@ -778,10 +663,106 @@ export default function RoomView({ roomId }: RoomViewProps) {
             </select>
           </div>
         )}
+
+        {/* Sync status indicator (Viewers) */}
+        {!isAdminOrMod && (
+          <div className="absolute bottom-4 right-4 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-2">
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+            <span>Synced with moderator</span>
+          </div>
+        )}
       </div>
 
-      {/* Chat Placeholder */}
+      {/* Control Bar */}
       <div className="border-t border-border bg-card p-4">
+        {isAdminOrMod ? (
+          // Admin/Mod Quick Controls
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => quickRewind(10)}
+              className="flex items-center gap-2"
+            >
+              <span>⏪</span> 10s
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => quickForward(10)}
+              className="flex items-center gap-2"
+            >
+              10s <span>⏩</span>
+            </Button>
+          </div>
+        ) : (
+          // Viewer Request Controls
+          <div className="flex items-center justify-center gap-3 mb-4 flex-wrap">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={requestPause}
+              className="flex items-center gap-2"
+            >
+              ⏸️ Request Pause
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => requestRewind(10)}
+              className="flex items-center gap-2"
+            >
+              ⏪ Go Back 10s
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => requestRewind(30)}
+              className="flex items-center gap-2"
+            >
+              ⏪ Go Back 30s
+            </Button>
+            <div className="relative group">
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                💬 Quick Message
+              </Button>
+              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-popover border border-border rounded-lg shadow-lg p-2 min-w-[200px]">
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => sendQuickMessage('Missed that')}
+                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
+                  >
+                    Missed that
+                  </button>
+                  <button
+                    onClick={() => sendQuickMessage('BRB bathroom')}
+                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
+                  >
+                    BRB bathroom
+                  </button>
+                  <button
+                    onClick={() => sendQuickMessage('Wait for me')}
+                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
+                  >
+                    Wait for me
+                  </button>
+                  <button
+                    onClick={() => sendQuickMessage('Can we rewind?')}
+                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
+                  >
+                    Can we rewind?
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Chat Input */}
         {guest?.permissions.can_chat ? (
           <input
             type="text"
