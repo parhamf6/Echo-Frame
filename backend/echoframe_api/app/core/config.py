@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     VIDEO_STORAGE_PATH: str = "storage/videos"
     SUBTITLE_STORAGE_PATH: str = "storage/subtitles"
 
+    # LiveKit
+    LIVEKIT_HOST: str = "http://localhost:7880"
+    LIVEKIT_API_KEY: str = "devkey123456789abcdef"
+    LIVEKIT_API_SECRET: str = "devsecret123456789abcdefghijklmnopqrstuvwxyz0123456789abcdef"
+    LIVEKIT_WEBHOOK_SECRET: str = "webhook_secret_change_this"
+
     # Cookie settings
     REFRESH_COOKIE_NAME: str = "refresh_token"
     REFRESH_COOKIE_SAMESITE: str = "lax"  # one of 'lax', 'strict', 'none'

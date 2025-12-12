@@ -11,6 +11,10 @@ import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { useGuestStore } from '@/lib/stores/guest-store';
 import SettingsModal from './SettingModal';
+import { useLiveKit } from '@/lib/hooks/use-livekit';
+import { useChatStore } from '@/lib/stores/chat-store';
+import { RoomTabs } from './RoomTabs';
+import { QuickControls } from './QuickControls';
 
 interface RoomViewProps {
   roomId: string;
@@ -47,6 +51,10 @@ const getVideoUrl = (path: string): string => {
 
 export default function RoomView({ roomId }: RoomViewProps) {
   const { guest } = useGuestStore();
+  const addMessage = useChatStore((s) => s.addMessage);
+  const updateReaction = useChatStore((s) => s.updateReaction);
+  const markTyping = useChatStore((s) => s.markTyping);
+  const clearChat = useChatStore((s) => s.clear);
   const [userListVersion, setUserListVersion] = useState(0);
   
   // Video state from server
@@ -70,6 +78,8 @@ export default function RoomView({ roomId }: RoomViewProps) {
   const isAdminOrMod = guest?.role === 'admin' || guest?.role === 'moderator';
   const currentVideo = playlist.find((v) => v.id === videoState.current_video_id) || playlist[0];
   const hlsUrl = currentVideo?.hls_manifest_path ? getVideoUrl(currentVideo.hls_manifest_path) : '';
+  const canChat = guest?.permissions.can_chat ?? false;
+  const canVoice = guest?.permissions.can_voice ?? false;
 
   // Parse master manifest
   const parseMasterManifest = (text: string, baseUrl: string) => {
@@ -485,6 +495,61 @@ export default function RoomView({ roomId }: RoomViewProps) {
     playerRef.current.currentTime(newTime);
   };
 
+  const {
+    room: livekitRoom,
+    isConnected: isLivekitConnected,
+    sendMessage: sendLivekitMessage,
+    sendReaction: sendLivekitReaction,
+    sendTyping: sendLivekitTyping,
+    disconnect: disconnectLivekit,
+  } = useLiveKit({
+    roomId,
+    guestId: guest?.id || '',
+    username: guest?.username || 'User',
+    canVoice,
+    onMessage: (payload) => {
+      if (payload?.type === 'chat:message') {
+        addMessage({
+          id: payload.id,
+          user_id: payload.user_id,
+          username: payload.username,
+          message: payload.message,
+          timestamp: payload.timestamp,
+          reply_to_id: payload.reply_to_id,
+        });
+      }
+    },
+    onReaction: (payload) => {
+      if (payload?.type === 'chat:reaction') {
+        updateReaction(payload.message_id, payload.emoji, payload.user_id, payload.action);
+      }
+    },
+    onTyping: (payload) => {
+      if (payload?.type === 'chat:typing') {
+        markTyping(payload.user_id, payload.username || 'User');
+      }
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      clearChat();
+      disconnectLivekit();
+    };
+  }, [clearChat, disconnectLivekit]);
+
+  const handleSendMessage = async (text: string, replyToId?: string | null) => {
+    await sendLivekitMessage(text, replyToId || undefined);
+  };
+
+  const handleReaction = async (messageId: string, emoji: string, action: 'add' | 'remove') => {
+    await sendLivekitReaction(messageId, emoji, action);
+  };
+
+  const handleTyping = async () => {
+    await sendLivekitTyping();
+  };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
@@ -674,103 +739,53 @@ export default function RoomView({ roomId }: RoomViewProps) {
       </div>
 
       {/* Control Bar */}
-      <div className="border-t border-border bg-card p-4">
+      <div className="border-t border-border bg-card p-4 space-y-4">
         {isAdminOrMod ? (
-          // Admin/Mod Quick Controls
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => quickRewind(10)}
-              className="flex items-center gap-2"
-            >
+          <div className="flex items-center justify-center gap-3">
+            <Button size="sm" variant="outline" onClick={() => quickRewind(10)} className="flex items-center gap-2">
               <span>⏪</span> 10s
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => quickForward(10)}
-              className="flex items-center gap-2"
-            >
+            <Button size="sm" variant="outline" onClick={() => quickForward(10)} className="flex items-center gap-2">
               10s <span>⏩</span>
             </Button>
           </div>
         ) : (
-          // Viewer Request Controls
-          <div className="flex items-center justify-center gap-3 mb-4 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={requestPause}
-              className="flex items-center gap-2"
-            >
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <Button size="sm" variant="outline" onClick={requestPause} className="flex items-center gap-2">
               ⏸️ Request Pause
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => requestRewind(10)}
-              className="flex items-center gap-2"
-            >
+            <Button size="sm" variant="outline" onClick={() => requestRewind(10)} className="flex items-center gap-2">
               ⏪ Go Back 10s
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => requestRewind(30)}
-              className="flex items-center gap-2"
-            >
+            <Button size="sm" variant="outline" onClick={() => requestRewind(30)} className="flex items-center gap-2">
               ⏪ Go Back 30s
             </Button>
-            <div className="relative group">
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                💬 Quick Message
-              </Button>
-              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block bg-popover border border-border rounded-lg shadow-lg p-2 min-w-[200px]">
-                <div className="flex flex-col gap-1">
-                  <button
-                    onClick={() => sendQuickMessage('Missed that')}
-                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
-                  >
-                    Missed that
-                  </button>
-                  <button
-                    onClick={() => sendQuickMessage('BRB bathroom')}
-                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
-                  >
-                    BRB bathroom
-                  </button>
-                  <button
-                    onClick={() => sendQuickMessage('Wait for me')}
-                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
-                  >
-                    Wait for me
-                  </button>
-                  <button
-                    onClick={() => sendQuickMessage('Can we rewind?')}
-                    className="text-sm px-3 py-1.5 hover:bg-accent rounded text-left"
-                  >
-                    Can we rewind?
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Chat Input */}
-        {guest?.permissions.can_chat ? (
-          <input
-            type="text"
-            placeholder="Type a message..."
-            className="w-full border border-input bg-background text-foreground rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+        <RoomTabs
+          roomId={roomId}
+          canChat={canChat}
+          currentUserId={guest?.id}
+          livekitRoom={livekitRoom}
+          onSendMessage={handleSendMessage}
+          onReact={handleReaction}
+          onTyping={handleTyping}
+          onRequestPause={requestPause}
+          onRequestRewind={requestRewind}
+        />
+
+        <QuickControls
+          room={livekitRoom}
+          onLeave={() => {
+            disconnectLivekit();
+            window.location.href = '/room';
+          }}
+        />
+        {isLivekitConnected ? (
+          <div className="text-xs text-muted-foreground text-right">LiveKit connected</div>
         ) : (
-          <p className="text-center text-muted-foreground">Chat disabled by moderator</p>
+          <div className="text-xs text-muted-foreground text-right">Connecting to LiveKit...</div>
         )}
       </div>
     </div>

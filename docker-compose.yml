@@ -19,6 +19,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
 
   # Redis Cache
   redis:
@@ -36,7 +44,52 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # LiveKit Server (Audio + Data Channel Only)
+  # livekit:
+  #   image: livekit/livekit-server:latest
+  #   container_name: echoframe-livekit
+  #   restart: unless-stopped
+  #   ports:
+  #     - "7880:7880"      # WebSocket/HTTP
+  #     - "7881:7881"      # HTTP API
+  #     - "7882:7882/udp"  # TURN/STUN
+  #     - "50000-50100:50000-50100/udp"  # RTC - Reduced range for audio only
+  #   volumes:
+  #     - ./livekit.yaml:/etc/livekit.yaml:ro
+  #   networks:
+  #     - echoframe-network
+  #   command: --config /etc/livekit.yaml
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 10s
+  #   depends_on:
+  #     - redis
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '1.0'      # Reduced from 2.0 (audio is much lighter than video)
+  #         memory: 512M     # Reduced from 1G (audio-only needs ~5MB per user)
+  #       reservations:
+  #         cpus: '0.5'
+  #         memory: 256M
+  #   mem_swappiness: 0
+  #   ulimits:
+  #     nofile:
+  #       soft: 65536
+  #       hard: 65536
 
 volumes:
   postgres_data:
