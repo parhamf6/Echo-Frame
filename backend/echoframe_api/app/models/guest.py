@@ -33,5 +33,10 @@ class Guest(Base):
     kicked = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
+    @property
+    def permissions(self) -> dict:
+        """Alias for permissions_json for easier access."""
+        return self.permissions_json or {"can_chat": False, "can_voice": False}
+    
     def __repr__(self):
         return f"<Guest {self.username} - {self.role}>"

@@ -1,91 +1,340 @@
-# LiveKit Configuration for Echo-Frame
-# Audio + Data Channel focused (no video streaming)
-# Production-ready with sensible defaults for watch party app
+# LiveKit Configuration for Echo-Frame Watch Party
+# Audio streaming + Data channels (chat/reactions)
+# Optimized for local development with production deployment notes
 
+# =============================================================================
+# NETWORK CONFIGURATION
+# =============================================================================
+
+# Main TCP port for RoomService and RTC endpoint
+# LOCAL: Use 7880
+# PRODUCTION: Place behind load balancer with TLS (port 443)
 port: 7880
 
-# Redis for distributed operation
-redis:
-  address: localhost:6379
-  db: 0
-  # To use sentinel remove the address key above and add the following
-  # sentinel_master_name: livekit
-  # sentinel_addresses:
-  # - livekit-redis-node-0.livekit-redis-headless:26379
-  # - livekit-redis-node-1.livekit-redis-headless:26379
-  # If you use a different set of credentials for sentinel add
-  # sentinel_username: user
-  # sentinel_password: pass
-  #
-  # To use TLS with redis
-  # tls:
-  #   enabled: true
-  #   # when set to true, LiveKit will not verify the server's certificate, defaults to true
-  #   insecure: false
-  #   server_name: myserver.com
-  #   # file containing trusted root certificates for verification
-  #   ca_cert_file: /path/to/ca.crt
-  #   client_cert_file: /path/to/client.crt
-  #   client_key_file: /path/to/client.key
-  #
-  # To use cluster remove the address key above and add the following
-  # cluster_addresses:
-  # - livekit-redis-node-0.livekit-redis-headless:6379
-  # - livekit-redis-node-1.livekit-redis-headless:6380
-  # And it will use the password key above as cluster password
-  # And the db key will not be used due to cluster mode not support it.
+# =============================================================================
+# REDIS (Optional but recommended for multi-node deployment)
+# =============================================================================
 
-# WebRTC configuration for audio + data channels
+# LOCAL: Comment out if running single node without Redis
+# PRODUCTION: Enable Redis for distributed/scalable deployment
+# redis:
+#   address: localhost:6379
+#   db: 0
+#   # For production with authentication:
+#   # username: myuser
+#   # password: mypassword
+
+# =============================================================================
+# WEBRTC CONFIGURATION
+# =============================================================================
+
 rtc:
+  # UDP port range for WebRTC media traffic
+  # IMPORTANT: These ports MUST be open in your firewall
+  # LOCAL: Ensure firewall allows UDP 50000-50100
+  # PRODUCTION: Open these ports on your cloud provider (AWS Security Group, etc.)
   port_range_start: 50000
   port_range_end: 50100
+  
+  # TCP fallback port (when UDP is blocked)
+  # This port must be directly accessible (not behind load balancer)
+  # LOCAL: Port 7881
+  # PRODUCTION: Keep 7881, ensure it's open in firewall
   tcp_port: 7881
+  
+  # Automatically detect public IP via STUN
+  # LOCAL: Set to true (will detect your router's public IP)
+  # PRODUCTION: Set to true for cloud deployments
   use_external_ip: true
+  
+  # Manual IP override (use if STUN detection fails)
+  # LOCAL: Usually not needed, STUN will detect correctly
+  # PRODUCTION: Set if behind complex NAT or STUN fails
+  # Uncomment and set your server's public IP:
+  # node_ip: "YOUR_PUBLIC_IP_HERE"
+  
+  # Use ICE Lite for faster connections
+  # LOCAL: Keep false (standard ICE works better for dev)
+  # PRODUCTION: Set to true if server has public IP (not behind NAT)
+  # use_ice_lite: false
+  
+  # STUN servers for NAT traversal
+  # These help clients discover their public IP
   stun_servers:
     - stun.l.google.com:19302
     - stun1.l.google.com:19302
+  
+  # TURN servers (relay for restricted networks)
+  # LOCAL: Not needed for development
+  # PRODUCTION: Highly recommended for reliability (5-10% of users need TURN)
+  # Option 1: Use LiveKit's embedded TURN server (see section below)
+  # Option 2: Use external TURN server:
+  # turn_servers:
+  #   - host: turn.yourdomain.com
+  #     port: 443
+  #     protocol: tls
+  #     username: "turnuser"
+  #     credential: "turnpassword"
+  
+  # Allow automatic fallback to TCP when UDP fails
+  allow_tcp_fallback: true
+  
+  # Congestion control (helps with poor networks)
+  congestion_control:
+    enabled: true
+    allow_pause: true
+  
+  # Packet buffers (lower for audio-only app to reduce latency)
+  packet_buffer_size_audio: 200
+  packet_buffer_size_video: 100  # Keep minimal since we're not streaming video
+  
+  # PLI throttle (not critical for audio-only, but good defaults)
+  pli_throttle:
+    low_quality: 500ms
+    mid_quality: 1s
+    high_quality: 1s
 
-# Logging
-logging:
-  level: info
-  sample: false
+# =============================================================================
+# MONITORING (Optional but recommended)
+# =============================================================================
 
-# API Keys - Match backend config values
-# From backend/echoframe_api/app/core/config.py
+# Prometheus metrics endpoint
+# LOCAL: Enable for debugging (access at http://localhost:6789/metrics)
+# PRODUCTION: Enable and configure monitoring
+prometheus_port: 6789
+
+# =============================================================================
+# AUTHENTICATION
+# =============================================================================
+
+# API keys for JWT token generation
+# IMPORTANT: These MUST match your backend configuration
+# LOCAL: Use dev keys
+# PRODUCTION: Generate secure random keys (openssl rand -hex 32)
 keys:
   devkey123456789abcdef: devsecret123456789abcdefghijklmnopqrstuvwxyz0123456789abcdef
+  # PRODUCTION: Add production keys
+  # APIKey_abc123: APISecret_xyz789_VERY_LONG_SECURE_RANDOM_STRING
 
-# Room Configuration
-# Audio-only watch party setup
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+logging:
+  # Log levels: debug, info, warn, error
+  # LOCAL: Use debug for troubleshooting
+  level: debug
+  # PRODUCTION: Use info or warn
+  # level: info
+  
+  # Pion (WebRTC library) logging
+  pion_level: warn
+  # LOCAL: Set to debug if you need WebRTC internals
+  # pion_level: debug
+  
+  # JSON output (for log aggregation)
+  # LOCAL: false (easier to read)
+  json: false
+  # PRODUCTION: true (for Datadog, CloudWatch, etc.)
+  # json: true
+  
+  # Log sampling (reduces log volume)
+  # LOCAL: false
+  sample: false
+  # PRODUCTION: true
+  # sample: true
+
+# =============================================================================
+# ROOM CONFIGURATION
+# =============================================================================
+
 room:
+  # Auto-create rooms when participants join
   auto_create: true
+  
+  # Keep room open for 5 minutes if empty
+  empty_timeout: 300
+  
+  # Close room 20 seconds after last participant leaves
+  departure_timeout: 20
+  
+  # Maximum participants per room (0 = unlimited)
+  # LOCAL: Set low for testing
+  max_participants: 50
+  # PRODUCTION: Adjust based on your needs
+  # max_participants: 100
+  
+  # Audio codec configuration
+  # Opus is ideal for voice chat
   enabled_codecs:
     - mime: audio/opus
-  max_participants: 100
-  empty_timeout: 300
+    # If you add video later:
+    # - mime: video/vp8
+  
+  # Allow host to remotely unmute participants
+  # Set to true if you want this feature
+  enable_remote_unmute: false
+  
+  # Audio/Video sync (not critical for audio-only)
+  playout_delay:
+    enabled: false
+    min: 100
+    max: 500
 
-# Node Limits
-# Conservative limits suitable for audio + data channels
-limit:
-  bytes_per_sec: 500000
-  num_tracks: 2
-  subscription_limit_audio: 100
+# =============================================================================
+# WEBHOOKS
+# =============================================================================
 
-# Audio Configuration
-# Optimized for voice chat
-audio:
-  active_level: 30
-  min_percentile: 40
-  update_interval: 200
-  smooth_intervals: 4
-
-# Webhooks
-# Send events to backend for logging and notifications
-# api_key must be one of the keys defined above
+# LiveKit will POST events to your backend
+# LOCAL: Point to local backend
 webhook:
   api_key: devkey123456789abcdef
   urls:
     - http://localhost:8000/api/v1/livekit/webhook
+# PRODUCTION: Use your production domain with HTTPS
+# webhook:
+#   api_key: APIKey_abc123
+#   urls:
+#     - https://api.yourdomain.com/api/v1/livekit/webhook
 
-# Development mode
-development: true
+# =============================================================================
+# AUDIO SETTINGS
+# =============================================================================
+
+# Fine-tune audio activity detection
+audio:
+  # Active level threshold (0-127, lower = louder required)
+  # 30 is good for normal speech
+  active_level: 30
+  
+  # Minimum percentile to be considered "speaking"
+  min_percentile: 40
+  
+  # How often to update clients about active speakers (ms)
+  # LOCAL: 200ms for responsive UI
+  update_interval: 200
+  # PRODUCTION: Can increase to 500ms to reduce bandwidth
+  # update_interval: 500
+  
+  # Smooth speaker changes over N samples (reduces jitter)
+  smooth_intervals: 4
+  
+  # Enable RED encoding for opus (error resilience)
+  active_red_encoding: true
+
+# =============================================================================
+# NODE LIMITS (Resource management)
+# =============================================================================
+
+limit:
+  # Max tracks per CPU core (-1 = no limit)
+  # LOCAL: Low limit for testing
+  num_tracks: 100
+  # PRODUCTION: Adjust based on server specs
+  # num_tracks: 400  # per CPU core
+  
+  # Max bandwidth per second
+  # LOCAL: 50 MB/s should be plenty
+  bytes_per_sec: 50_000_000
+  # PRODUCTION: Scale based on expected traffic
+  # bytes_per_sec: 1_000_000_000  # 1 GB/s
+  
+  # Per-participant subscription limits
+  subscription_limit_audio: 50
+  subscription_limit_video: 0  # Not using video
+  
+  # Metadata size limits (0 = no limit)
+  max_metadata_size: 10240  # 10 KB
+  max_attributes_size: 10240  # 10 KB
+
+# =============================================================================
+# EMBEDDED TURN SERVER (Optional but recommended for production)
+# =============================================================================
+
+# TURN relay for clients behind restrictive firewalls/NAT
+# LOCAL: Not needed for development
+# PRODUCTION: Highly recommended for 99% connectivity
+# turn:
+#   enabled: true
+#   
+#   # UDP port for TURN (recommend 443 if not using QUIC/HTTP3)
+#   udp_port: 3478
+#   
+#   # TLS port (must be 443 for best firewall compatibility)
+#   tls_port: 443
+#   
+#   # Port range for TURN relay connections
+#   relay_range_start: 30000
+#   relay_range_end: 31000
+#   
+#   # If using L4 load balancer for TLS termination
+#   external_tls: false
+#   
+#   # Domain for TLS certificate
+#   domain: turn.yourdomain.com
+#   
+#   # TLS certificate files
+#   cert_file: /etc/livekit/turn-cert.pem
+#   key_file: /etc/livekit/turn-key.pem
+
+# =============================================================================
+# PRODUCTION-ONLY SETTINGS
+# =============================================================================
+
+# Region for multi-region deployments
+# region: us-west-1
+
+# Node selector for load balancing
+# node_selector:
+#   kind: sysload
+#   sort_by: sysload
+#   sysload_limit: 0.7
+
+# =============================================================================
+# FIREWALL CHECKLIST
+# =============================================================================
+
+# LOCAL DEVELOPMENT:
+# - TCP 7880 (main port)
+# - TCP 7881 (TCP fallback)
+# - UDP 50000-50100 (WebRTC media)
+# - TCP 6789 (Prometheus - optional)
+#
+# PRODUCTION:
+# - TCP 443 (HTTPS/WSS via load balancer)
+# - TCP 7880 (or your chosen port)
+# - TCP 7881 (TCP fallback)
+# - UDP 50000-50100 (WebRTC media) - CRITICAL!
+# - UDP 3478 (TURN if enabled)
+# - TCP/UDP 443 (TURN TLS if enabled)
+# - TCP 6789 (Prometheus)
+#
+# Cloud-specific notes:
+# - AWS: Configure Security Group with above ports
+# - GCP: Configure Firewall Rules
+# - DigitalOcean: Configure Cloud Firewall
+# - Azure: Configure Network Security Group
+
+# =============================================================================
+# QUICK START
+# =============================================================================
+
+# 1. Save this file as livekit.yaml
+# 2. Open firewall ports (see checklist above)
+# 3. Start LiveKit:
+#    ./livekit-server --config livekit.yaml
+# 4. Check logs for "starting LiveKit server"
+# 5. Verify STUN detected correct IP in logs
+# 6. Test connection from your app
+
+# =============================================================================
+# TROUBLESHOOTING
+# =============================================================================
+
+# If connections fail:
+# 1. Check firewall allows UDP 50000-50100
+# 2. Verify use_external_ip detected correct IP (check logs)
+# 3. If behind NAT, manually set node_ip
+# 4. Enable debug logging (level: debug, pion_level: debug)
+# 5. Check Prometheus metrics at localhost:6789/metrics
+# 6. Test with LiveKit's CLI: livekit-cli test-connection

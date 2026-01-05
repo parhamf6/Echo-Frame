@@ -126,7 +126,10 @@ async def get_current_user(
     # (You can enhance this to check Redis session:{token})
     result = await db.execute(select(Guest).where(Guest.session_token == authorization))
     guest = result.scalar_one_or_none()
-    if guest and guest.join_status == JoinStatus.ACCEPTED and not guest.kicked:
+    # Allow both PENDING and ACCEPTED guests to authenticate
+    # PENDING guests can connect but have limited permissions
+    # REJECTED or KICKED guests cannot authenticate
+    if guest and guest.join_status in [JoinStatus.ACCEPTED, JoinStatus.PENDING] and not guest.kicked:
         return guest
     
     raise HTTPException(status_code=401, detail="Invalid or expired token")

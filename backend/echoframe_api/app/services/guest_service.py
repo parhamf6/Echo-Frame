@@ -100,6 +100,8 @@ async def accept_guest(db: AsyncSession, guest_id: str) -> Optional[Guest]:
     if not guest:
         return None
     guest.join_status = JoinStatus.ACCEPTED
+    # Grant voice and chat permissions when accepting
+    guest.permissions_json = {"can_chat": True, "can_voice": True}
     db.add(guest)
     await db.flush()
     await db.refresh(guest)

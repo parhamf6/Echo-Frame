@@ -13,6 +13,7 @@ from datetime import datetime
 import json
 from app.core.socketio_manager import sio
 import socketio
+import asyncio
 
 # ============= LOGGING SETUP =============
 logging.basicConfig(
@@ -40,10 +41,7 @@ app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 # ============= CORS MIDDLEWARE (MUST BE BEFORE SOCKETIO) =============
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=settings.ALLOWED_ORIGINS,  # Use from .env instead of hardcoded
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -126,6 +124,9 @@ async def startup():
     except Exception as e:
         # In development we log and continue; in production RedisClient may raise
         logger.error(f"Failed to initialize Redis on startup: {e}")
+    from app.api.v1.livekit_webhook import cleanup_typing_indicators
+    asyncio.create_task(cleanup_typing_indicators())
+    logger.info("✅ Typing indicator cleanup task started")
     
     request_stats["start_time"] = datetime.now()
 
@@ -136,6 +137,16 @@ async def shutdown():
     await close_db()
 
 app.include_router(api_router, prefix="/api/v1")
+
+
+# DEBUG: Print all registered routes
+print("\n" + "="*80)
+print("REGISTERED ROUTES:")
+print("="*80)
+for route in app.routes:
+    if hasattr(route, 'path') and hasattr(route, 'methods'):
+        print(f"{list(route.methods)[0]:8} {route.path}")
+print("="*80 + "\n")
 
 @app.get("/")
 async def root():

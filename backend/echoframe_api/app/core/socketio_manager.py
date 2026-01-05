@@ -508,6 +508,20 @@ async def emit_permission_changed(room_id: str, guest_id: str, permissions: dict
         sid = room_connections[room_id][guest_id]['sid']
         await sio.emit('permissions_updated', {'permissions': permissions}, to=sid)
         logger.info(f"Sent permission update to {guest_id}")
+    else:
+        logger.warning(f"Guest {guest_id} not connected yet, permission update won't be delivered immediately")
+
+
+async def emit_guest_accepted(room_id: str, guest_id: str, permissions: dict):
+    """Notify a guest that they were accepted (used after accept_guest)"""
+    if room_id in room_connections and guest_id in room_connections[room_id]:
+        sid = room_connections[room_id][guest_id]['sid']
+        await sio.emit('guest_accepted', {
+            'guest_id': guest_id,
+            'permissions': permissions,
+            'message': 'Your join request was approved!'
+        }, to=sid)
+        logger.info(f"Sent acceptance notification to {guest_id}")
 
 
 async def emit_role_changed(room_id: str, guest_id: str, role: str):

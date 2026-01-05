@@ -13,6 +13,15 @@ class Settings(BaseSettings):
     - Configure ALLOWED_ORIGINS with actual domains
     - Adjust token expiry times
     - Enable validation checks (uncomment validate_secrets call at bottom)
+    
+    🔒 LIVEKIT CREDENTIALS:
+    All LiveKit configuration is loaded from environment variables in .env:
+    - LIVEKIT_HOST (WebSocket URL)
+    - LIVEKIT_API_KEY (API Key)
+    - LIVEKIT_API_SECRET (API Secret)
+    - LIVEKIT_WEBHOOK_SECRET (Webhook Secret)
+    
+    To update LiveKit keys, ONLY modify the .env file. No code changes needed.
     """
     
     # Database URLs
@@ -57,11 +66,18 @@ class Settings(BaseSettings):
     VIDEO_STORAGE_PATH: str = "storage/videos"
     SUBTITLE_STORAGE_PATH: str = "storage/subtitles"
 
-    # LiveKit
-    LIVEKIT_HOST: str = "http://localhost:7880"
-    LIVEKIT_API_KEY: str = "devkey123456789abcdef"
-    LIVEKIT_API_SECRET: str = "devsecret123456789abcdefghijklmnopqrstuvwxyz0123456789abcdef"
-    LIVEKIT_WEBHOOK_SECRET: str = "webhook_secret_change_this"
+    # LiveKit Configuration
+    # 🔒 CHANGE LOCATION: Update values in .env file (backend/echoframe_api/.env)
+    # Do NOT change hardcoded values below - they read from environment variables
+    # To update LiveKit keys, edit only the .env file at:
+    # - LIVEKIT_HOST (LiveKit WebSocket URL)
+    # - LIVEKIT_API_KEY (LiveKit API Key)
+    # - LIVEKIT_API_SECRET (LiveKit API Secret)
+    # - LIVEKIT_WEBHOOK_SECRET (Webhook Secret)
+    LIVEKIT_HOST: str  # 🔒 UPDATE IN .env
+    LIVEKIT_API_KEY: str  # 🔒 UPDATE IN .env
+    LIVEKIT_API_SECRET: str  # 🔒 UPDATE IN .env
+    LIVEKIT_WEBHOOK_SECRET: str  # 🔒 UPDATE IN .env
 
     # Cookie settings
     REFRESH_COOKIE_NAME: str = "refresh_token"
@@ -114,6 +130,10 @@ class Settings(BaseSettings):
             # Check token expiry
             if self.ACCESS_TOKEN_EXPIRE_MINUTES > 15:
                 errors.append("ACCESS_TOKEN_EXPIRE_MINUTES should be 15 or less in production")
+            
+            # Check LiveKit secrets
+            if "devkey" in self.LIVEKIT_API_KEY or "devsecret" in self.LIVEKIT_API_SECRET:
+                errors.append("LiveKit API keys must be changed from default values in production")
             
             if errors:
                 raise ValueError(f"Production configuration errors:\n" + "\n".join(f"- {e}" for e in errors))

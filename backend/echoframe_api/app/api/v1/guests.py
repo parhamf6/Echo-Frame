@@ -16,6 +16,7 @@ from app.core.socketio_manager import (
     emit_join_request,
     emit_role_changed,
     get_guest_presence,
+    emit_guest_accepted,
 )
 
 router = APIRouter()
@@ -184,9 +185,13 @@ async def accept_guest(guest_id: str, current_user=Depends(require_moderator_or_
     guest = await guest_service.accept_guest(db, guest_id)
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
+    
+    # Emit permission and status changes via Socket.IO
+    permissions = guest.permissions_json or {"can_chat": True, "can_voice": True}
+    await emit_guest_accepted(str(guest.room_id), guest_id, permissions)
     await emit_user_list_updated(str(guest.room_id))
 
-    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
+    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at), permissions=guest.permissions_json)
 
 
 @router.patch("/{guest_id}/reject", response_model=GuestResponse)
@@ -195,7 +200,7 @@ async def reject_guest(guest_id: str, admin=Depends(get_current_admin), db: Asyn
     if not guest:
         raise HTTPException(status_code=404, detail="Guest not found")
 
-    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at))
+    return GuestResponse(id=str(guest.id), room_id=str(guest.room_id), username=guest.username, join_status=guest.join_status.value, role=guest.role.value, kicked=guest.kicked, created_at=str(guest.created_at), permissions=guest.permissions_json)
 
 
 @router.patch("/{guest_id}/permissions", response_model=PermissionResponse)

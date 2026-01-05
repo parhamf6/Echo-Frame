@@ -1,137 +1,138 @@
-import uuid
-from datetime import datetime, timezone
-from typing import Dict, Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+"""
+Chat API Endpoints - Modified to accept client-generated IDs
+"""
+from typing import Dict, List
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
 
-from app.api.deps import get_current_user, get_db_session, get_redis
-from app.core.redis_chat import RedisChatService
+from app.core.redis_chat import redis_chat_service
+from app.api.deps import get_current_user
 from app.models.admin import Admin
-from app.models.guest import Guest, JoinStatus
-from app.models.room import Room
-from app.core.redis_client import RedisClient
+from app.models.guest import Guest
+
+router = APIRouter()
 
 
-router = APIRouter(prefix="/rooms", tags=["chat"])
+class SendMessageRequest(BaseModel):
+    """Request body for sending a message"""
+    message: str = Field(..., min_length=1, max_length=1000)
+    reply_to_id: str | None = None
+    message_id: str | None = None  # ← NEW: Accept pre-generated ID
+    timestamp: str | None = None   # ← NEW: Accept pre-generated timestamp
 
 
-class ChatMessageCreate(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
-    reply_to_id: Optional[str] = None
+class MessageResponse(BaseModel):
+    """Single message response"""
+    id: str
+    user_id: str
+    username: str
+    message: str
+    timestamp: str
+    reply_to_id: str | None
 
 
 class ChatHistoryResponse(BaseModel):
-    messages: list[dict]
-    reactions: Dict[str, Dict[str, list[str]]]
+    """Chat history response with messages and reactions"""
+    messages: List[MessageResponse]
+    reactions: Dict[str, Dict[str, List[str]]]
 
 
-class ChatSendResponse(BaseModel):
-    id: str
-    timestamp: str
-
-
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-async def _get_room_or_404(db: AsyncSession, room_id: str) -> Room:
-    try:
-        room_uuid = uuid.UUID(room_id)
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=400, detail="Invalid room_id format")
-
-    result = await db.execute(select(Room).where(Room.id == room_uuid))
-    room = result.scalar_one_or_none()
-    if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
-    return room
-
-
-async def _ensure_room_access(room_id: str, current_user, db: AsyncSession) -> None:
-    await _get_room_or_404(db, room_id)
-
-    if isinstance(current_user, Admin):
-        return
-
-    if not isinstance(current_user, Guest):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    if str(current_user.room_id) != room_id:
-        raise HTTPException(status_code=403, detail="Access denied for this room")
-
-    if current_user.join_status != JoinStatus.ACCEPTED or current_user.kicked:
-        raise HTTPException(status_code=403, detail="Guest is not allowed in this room")
-
-
-def _check_can_chat(user) -> None:
-    if isinstance(user, Admin):
-        return
-    if isinstance(user, Guest):
-        perms = user.permissions_json or {}
-        if perms.get("can_chat"):
-            return
-    raise HTTPException(status_code=403, detail="Chat permission required")
-
-
-def _build_message_payload(user, payload: ChatMessageCreate) -> dict:
-    user_id = str(user.id)
-    username = getattr(user, "username", "User")
-    return {
-        "id": f"msg_{uuid.uuid4()}",
-        "user_id": user_id,
-        "username": username,
-        "message": payload.message,
-        "timestamp": _iso_now(),
-        "reply_to_id": payload.reply_to_id,
-    }
-
-
-def _get_chat_service(redis: RedisClient) -> RedisChatService:
-    return RedisChatService(redis)
-
-
-@router.get("/{room_id}/chat/history", response_model=ChatHistoryResponse)
+@router.get(
+    "/{room_id}/chat/history",
+    response_model=ChatHistoryResponse,
+    summary="Get chat history",
+)
 async def get_chat_history(
     room_id: str,
-    limit: int = 200,
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-    redis: RedisClient = Depends(get_redis),
+    current_user: Admin | Guest = Depends(get_current_user)
 ):
-    """Fetch the last 200 messages (with reactions) for a room."""
-    await _ensure_room_access(room_id, current_user, db)
+    """Get chat history for a room"""
+    # Verify user has access
+    if isinstance(current_user, Guest):
+        if str(current_user.room_id) != room_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this room"
+            )
+    
+    # Get messages and reactions
+    messages = await redis_chat_service.get_messages(room_id, limit=200)
+    message_ids = [msg["id"] for msg in messages]
+    reactions = await redis_chat_service.get_all_reactions_for_room(room_id, message_ids)
+    
+    return ChatHistoryResponse(
+        messages=messages,
+        reactions=reactions
+    )
 
-    chat_service = _get_chat_service(redis)
-    messages = await chat_service.get_messages(room_id, limit=limit)
 
-    reactions: Dict[str, Dict[str, list[str]]] = {}
-    for msg in messages:
-        msg_id = msg.get("id")
-        if not msg_id:
-            continue
-        reactions[msg_id] = await chat_service.get_reactions(room_id, msg_id)
-
-    return ChatHistoryResponse(messages=messages, reactions=reactions)
-
-
-@router.post("/{room_id}/chat/message", response_model=ChatSendResponse)
+@router.post(
+    "/{room_id}/chat/message",
+    response_model=MessageResponse,
+    summary="Send/save chat message",
+)
 async def send_chat_message(
     room_id: str,
-    payload: ChatMessageCreate,
-    current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session),
-    redis: RedisClient = Depends(get_redis),
+    request: SendMessageRequest,
+    current_user: Admin | Guest = Depends(get_current_user)
 ):
-    """Fallback HTTP endpoint to store a chat message (primary path is LiveKit data channel)."""
-    await _ensure_room_access(room_id, current_user, db)
-    _check_can_chat(current_user)
-
-    chat_service = _get_chat_service(redis)
-    message = _build_message_payload(current_user, payload)
-    await chat_service.add_message(room_id, message)
-
-    return ChatSendResponse(id=message["id"], timestamp=message["timestamp"])
-
+    """
+    Send/save a chat message
+    
+    This endpoint serves dual purpose:
+    1. Fallback if LiveKit Data Channel fails
+    2. Save messages to Redis for persistence (called by frontend after LiveKit send)
+    """
+    # Verify user has access
+    if isinstance(current_user, Guest):
+        if str(current_user.room_id) != room_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this room"
+            )
+        
+        # Check chat permission
+        if not current_user.permissions.get("can_chat", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to send messages"
+            )
+        
+        user_id = str(current_user.id)
+        username = current_user.username
+    else:
+        # Admin
+        user_id = f"admin_{current_user.id}"
+        username = current_user.username or "Admin"
+    
+    # ✅ Use client-provided ID and timestamp if available
+    # This prevents duplicates when message is sent via LiveKit AND saved via API
+    message_id = request.message_id
+    timestamp = request.timestamp
+    
+    if timestamp:
+        # Validate timestamp format
+        try:
+            datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+        except ValueError:
+            timestamp = None  # Invalid format, let Redis generate new one
+    
+    # Add message to Redis
+    message_obj = await redis_chat_service.add_message(
+        room_id=room_id,
+        user_id=user_id,
+        username=username,
+        message=request.message,
+        reply_to_id=request.reply_to_id,
+        message_id=message_id,    # ← Pass the ID
+        timestamp=timestamp,       # ← Pass the timestamp
+    )
+    
+    if not message_obj:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to store message"
+        )
+    
+    return MessageResponse(**message_obj)

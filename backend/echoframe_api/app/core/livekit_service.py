@@ -1,12 +1,12 @@
-import base64
-import hmac
-import json
+"""
+LiveKit Service
+Handles LiveKit token generation and room management
+"""
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
-
-import httpx
-from jose import jwt
+from typing import Dict, Optional
+from livekit import api
+import json
+import secrets
 
 from app.core.config import settings
 
@@ -14,76 +14,132 @@ logger = logging.getLogger(__name__)
 
 
 class LiveKitService:
-    """Minimal LiveKit helper for token generation and data messages."""
-
+    """Service for managing LiveKit connections and tokens"""
+    
     def __init__(self):
-        self.host = settings.LIVEKIT_HOST.rstrip("/")
+        # 🔒 LIVEKIT CREDENTIALS: All values are loaded from environment variables in .env
+        # If you need to change LiveKit keys, update the .env file:
+        # - LIVEKIT_HOST (WebSocket URL)
+        # - LIVEKIT_API_KEY (API Key)
+        # - LIVEKIT_API_SECRET (API Secret)
+        # - LIVEKIT_WEBHOOK_SECRET (Webhook Secret)
+        # Location: backend/echoframe_api/.env
         self.api_key = settings.LIVEKIT_API_KEY
         self.api_secret = settings.LIVEKIT_API_SECRET
-
-    def _room_name(self, room_id: str) -> str:
-        return f"room_{room_id}"
-
-    def _basic_auth_header(self) -> str:
-        return f"Bearer {self.api_key}:{self.api_secret}"
-
-    def _encode_data(self, data: dict) -> str:
-        """LiveKit SendData expects base64-encoded bytes."""
-        return base64.b64encode(json.dumps(data).encode("utf-8")).decode("utf-8")
-
-    async def send_data_message(self, room_id: str, data: Dict[str, Any], reliable: bool = True) -> None:
+        self.host = settings.LIVEKIT_HOST
+    
+    async def generate_token(
+        self,
+        room_id: str,
+        guest_id: str,
+        username: str,
+        can_voice: bool,
+        can_chat: bool,
+        role: str = "viewer"
+    ) -> Dict[str, str]:
         """
-        Broadcast a data message to a room via LiveKit RoomService.
-        Uses the Twirp HTTP endpoint so we don't need gRPC stubs.
+        Generate LiveKit access token for a user
+        
+        Args:
+            room_id: Room identifier
+            guest_id: Guest/user identifier
+            username: Display name
+            can_voice: Whether user can publish audio
+            can_chat: Whether user can send data (chat messages)
+            role: User role (viewer, moderator, admin)
+        
+        Returns:
+            dict: {token: str, room_name: str}
         """
-        url = f"{self.host}/twirp/livekit.RoomService/SendData"
-        payload = {
-            "room": self._room_name(room_id),
-            "data": self._encode_data(data),
-            "kind": "RELIABLE" if reliable else "LOSSY",
-        }
-
-        headers = {"Authorization": self._basic_auth_header()}
-
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code != 200:
-                    logger.error(f"[LiveKit] SendData failed: {resp.status_code} {resp.text}")
+            # Create token instance
+            token = api.AccessToken(
+                api_key=self.api_key,
+                api_secret=self.api_secret
+            )
+            
+            # Create a session-unique identity to avoid duplicate-identity errors
+            # Keep the original guest_id in metadata so server-side logic can
+            # map sessions back to a user (guest/admin).
+            session_suffix = secrets.token_hex(4)
+            session_identity = f"{guest_id}-{session_suffix}"
+
+            # Set identity and metadata
+            token.with_identity(session_identity)
+            token.with_name(username)
+            token.with_metadata(json.dumps({
+                "username": username,
+                "guest_id": guest_id,
+                "role": role,
+                "session_identity": session_identity
+            }))
+            
+            # Configure permissions
+            grants = api.VideoGrants(
+                room_join=True,
+                room=f"room_{room_id}",
+                
+                # Audio permissions (voice chat)
+                can_publish=can_voice,
+                can_subscribe=True,  # Always allow listening
+                
+                # Data channel permissions (text chat)
+                can_publish_data=can_chat,
+                can_update_own_metadata=True,
+            )
+            
+            # Only allow microphone source (no video)
+            if can_voice:
+                # Don't explicitly set can_publish_sources - LiveKit will handle it
+                # We're audio-only so no need to restrict sources
+                pass
+            
+            token.with_grants(grants)
+            
+            jwt_token = token.to_jwt()
+            
+            logger.info(
+                f"Generated LiveKit token for {username} (guest_id={guest_id}) "
+                f"in room {room_id} - voice={can_voice}, chat={can_chat}"
+            )
+            
+            return {
+                "token": jwt_token,
+                "room_name": f"room_{room_id}",
+                "ws_url": self.host
+            }
+            
         except Exception as e:
-            logger.error(f"[LiveKit] SendData exception: {e}")
-
-    def generate_token(self, room_id: str, guest_id: str, username: str, can_voice: bool, role: str) -> str:
+            logger.error(f"Failed to generate LiveKit token: {e}")
+            raise ValueError(f"Token generation failed: {str(e)}")
+    
+    async def send_data_message(
+        self,
+        room_name: str,
+        data: Dict,
+        destination_identities: Optional[list] = None
+    ) -> bool:
         """
-        Generate a LiveKit access token (HS256 JWT) without external SDK.
+        Send data message to LiveKit room (for server-side broadcasting)
+        
+        Args:
+            room_name: LiveKit room name
+            data: Message data to send
+            destination_identities: Optional list of specific user identities to send to
+        
+        Returns:
+            bool: Success status
         """
-        now = datetime.now(timezone.utc)
-        exp = now + timedelta(hours=4)
-
-        claims = {
-            "iss": self.api_key,
-            "sub": guest_id,
-            "name": username,
-            "video": {
-                "room": self._room_name(room_id),
-                "room_join": True,
-                "room_list": False,
-                "can_publish": bool(can_voice),
-                "can_subscribe": True,
-                "can_publish_data": True,
-                "can_publish_sources": ["mic"] if can_voice else [],
-            },
-            "metadata": json.dumps({"username": username, "role": role}),
-            "nbf": int(now.timestamp()),
-            "exp": int(exp.timestamp()),
-        }
-
-        token = jwt.encode(claims, self.api_secret, algorithm="HS256")
-        return token
-
-    def verify_webhook(self, provided_secret: Optional[str]) -> bool:
-        """Simple shared-secret verification for webhook calls."""
-        if not provided_secret:
+        try:
+            # TODO: Implement server-side data sending if needed
+            # For now, clients will send data directly via LiveKit Data Channel
+            logger.warning("Server-side data sending not yet implemented")
             return False
-        return hmac.compare_digest(provided_secret, settings.LIVEKIT_WEBHOOK_SECRET)
+            
+        except Exception as e:
+            logger.error(f"Failed to send data message: {e}")
+            return False
 
+
+# Singleton instance
+livekit_service = LiveKitService()

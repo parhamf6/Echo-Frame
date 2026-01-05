@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import UsersListTab from './UsersListTab';
 import JoinRequestsTab from './JoinRequestTab';
 import { useGuestStore } from '@/lib/stores/guest-store';
+import { useRoomStore } from '@/lib/stores/room-store';
 
 interface SettingsModalProps {
   userListVersion: number;
@@ -16,6 +17,7 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ userListVersion }: SettingsModalProps) {
   const { guest } = useGuestStore();
+  const { requestsVersion } = useRoomStore();
   const [open, setOpen] = useState(false);
 
   const canModerate = guest?.role === 'moderator' || guest?.role === 'admin';
@@ -46,7 +48,7 @@ export default function SettingsModal({ userListVersion }: SettingsModalProps) {
             <UsersListTab canModerate={canModerate} userListVersion={userListVersion} />
           </TabsContent>
 
-          <TabsContent value="requests" className="mt-4">
+          <TabsContent value="requests" className="mt-4" key={requestsVersion}>
             <JoinRequestsTab canModerate={canModerate} />
           </TabsContent>
         </Tabs>

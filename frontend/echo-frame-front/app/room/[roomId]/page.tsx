@@ -22,6 +22,8 @@ export default function RoomPage() {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Connecting to room...');
+  const [roomInitialized, setRoomInitialized] = useState(false);
+  const [waitingForApproval, setWaitingForApproval] = useState(false);
 
   useEffect(() => {
     const initRoom = async () => {
@@ -51,6 +53,8 @@ export default function RoomPage() {
         try {
           setLoadingMessage('Joining as admin...');
           await joinAsAdmin(roomId);
+          setIsLoading(false);
+          setRoomInitialized(true);
         } catch (error: any) {
           if (error.response?.status === 404) {
             toast.error('This room does not exist or has ended');
@@ -58,8 +62,6 @@ export default function RoomPage() {
           } else {
             toast.error('Failed to join room as admin');
           }
-        } finally {
-          setIsLoading(false);
         }
         return;
       }
@@ -68,11 +70,20 @@ export default function RoomPage() {
       if (sessionToken) {
         try {
           setLoadingMessage('Restoring session...');
-          await useGuestStore.getState().restoreSession(roomId, sessionToken);
+          const state = useGuestStore.getState();
+          await state.restoreSession(roomId, sessionToken);
+          
+          // Check if guest is pending
+          if (state.joinStatus === 'pending') {
+            setWaitingForApproval(true);
+            setIsLoading(false);
+          } else {
+            setIsLoading(false);
+            setRoomInitialized(true);
+          }
         } catch (error: any) {
           console.log('Session restore failed, showing username modal:', error.message);
           setShowUsernameModal(true);
-        } finally {
           setIsLoading(false);
         }
       } else {
@@ -82,7 +93,7 @@ export default function RoomPage() {
     };
 
     initRoom();
-  }, [roomId, isAuthenticated, admin]);
+  }, [roomId, isAuthenticated, admin, joinAsAdmin]);
 
   if (isLoading) {
     return (
@@ -145,12 +156,16 @@ export default function RoomPage() {
     return (
       <UsernameModal
         roomId={roomId}
-        onSuccess={() => setShowUsernameModal(false)}
+        onSuccess={() => {
+          setShowUsernameModal(false);
+          setWaitingForApproval(true);
+        }}
       />
     );
   }
 
-  if (joinStatus === 'pending') {
+  // Show waiting screen if guest is pending
+  if (waitingForApproval || joinStatus === 'pending') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <motion.div
@@ -210,6 +225,11 @@ export default function RoomPage() {
         </motion.div>
       </div>
     );
+  }
+
+  // If guest exists and is accepted, show room immediately (connecting in background)
+  if (guest && joinStatus === 'accepted') {
+    return <RoomView roomId={roomId} />;
   }
 
   if (joinStatus === 'rejected') {

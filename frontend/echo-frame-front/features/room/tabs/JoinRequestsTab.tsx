@@ -1,4 +1,3 @@
-// app/room/[roomId]/components/SettingsModal/JoinRequestsTab.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -22,7 +21,8 @@ interface JoinRequestsTabProps {
 }
 
 export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
-  const { requests: storeRequests, requestsVersion, removePendingRequest } = useRoomStore();
+  // ✅ FIX: Use room store for real-time updates
+  const { pendingRequests, requestsVersion, removePendingRequest, setPendingRequests } = useRoomStore();
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
@@ -31,23 +31,24 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
   const params = useParams();
   const roomId = params.roomId as string;
 
-  // Poll for requests every 5 seconds as a fallback
+  // ✅ FIX: Listen to store updates (real-time from socket)
+  useEffect(() => {
+    if (canModerate && pendingRequests && pendingRequests.length >= 0) {
+      console.log('[JoinRequestsTab] Store updated, syncing local state:', pendingRequests.length);
+      setRequests(pendingRequests);
+    }
+  }, [requestsVersion, canModerate, pendingRequests]);
+
+  // Poll for requests every 10 seconds as a fallback
   useEffect(() => {
     if (!canModerate) return;
 
     const pollInterval = setInterval(() => {
       fetchRequests(false);
-    }, 5000);
+    }, 10000);
 
     return () => clearInterval(pollInterval);
   }, [canModerate, roomId]);
-
-  // Listen to store updates (real-time from socket)
-  useEffect(() => {
-    if (canModerate && storeRequests.length > 0) {
-      setRequests(storeRequests);
-    }
-  }, [requestsVersion, canModerate, storeRequests]);
 
   const fetchRequests = async (showLoadingSpinner = true) => {
     if (!canModerate) return;
@@ -60,10 +61,13 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
       const { data } = await apiClient.get('/api/v1/guests/pending', {
         params: { room_id: roomId },
       });
+      
+      console.log('[JoinRequestsTab] Fetched requests:', data.length);
+      
       setRequests(data);
       
-      // Also update the store to keep in sync
-      useRoomStore.getState().setPendingRequests(data);
+      // ✅ FIX: Update the store to keep in sync
+      setPendingRequests(data);
       
       if (!initialLoadDone) {
         setInitialLoadDone(true);
@@ -98,7 +102,7 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
     try {
       await apiClient.patch(`/api/v1/guests/${guestId}/accept`);
       
-      // Remove from local state
+      // ✅ FIX: Remove from both local and store state
       setRequests((prev) => prev.filter((r) => r.id !== guestId));
       removePendingRequest(guestId);
       
@@ -124,7 +128,7 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
     try {
       await apiClient.patch(`/api/v1/guests/${guestId}/reject`);
       
-      // Remove from local state
+      // ✅ FIX: Remove from both local and store state
       setRequests((prev) => prev.filter((r) => r.id !== guestId));
       removePendingRequest(guestId);
       
@@ -156,13 +160,14 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full p-4 space-y-4 overflow-y-auto">
       {/* Refresh Button */}
       <Button
         onClick={handleRefresh}
         disabled={loading}
         variant="outline"
         className="w-full"
+        size="sm"
       >
         <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
         Refresh Requests
@@ -178,8 +183,8 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
       {/* Empty State */}
       {!loading && initialLoadDone && requests.length === 0 && (
         <div className="text-center py-8">
-          <p className="text-muted-foreground">No pending requests</p>
-          <p className="text-sm text-muted-foreground mt-2">
+          <p className="text-muted-foreground text-sm">No pending requests</p>
+          <p className="text-xs text-muted-foreground mt-2">
             New join requests will appear here in real-time
           </p>
         </div>
@@ -187,7 +192,7 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
 
       {/* Requests List */}
       {initialLoadDone && requests.length > 0 && (
-        <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+        <div className="space-y-2">
           {requests.map((req) => {
             const isProcessing = processingRequest === req.id;
             const timeAgo = formatDistanceToNow(new Date(req.created_at), {
@@ -197,29 +202,31 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
             return (
               <div
                 key={req.id}
-                className="flex items-center justify-between border rounded-lg p-3 bg-card"
+                className="flex flex-col border rounded-lg p-3 bg-background/50 hover:bg-background/80 transition-colors"
               >
-                <div className="flex-1">
-                  <p className="font-medium">{req.username}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Requested {timeAgo}
-                  </p>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{req.username}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Requested {timeAgo}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex gap-2 ml-4">
+                <div className="flex gap-2 justify-between">
                   {/* Accept Button */}
                   <Button
                     size="sm"
                     variant="default"
                     onClick={() => handleAccept(req.id, req.username)}
                     disabled={isProcessing}
-                    className="text-xs"
+                    className="text-xs flex-1"
                   >
                     {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <>
-                        <Check className="h-4 w-4 mr-1" />
+                        <Check className="h-3 w-3 mr-1" />
                         Accept
                       </>
                     )}
@@ -231,13 +238,13 @@ export default function JoinRequestsTab({ canModerate }: JoinRequestsTabProps) {
                     variant="destructive"
                     onClick={() => handleReject(req.id, req.username)}
                     disabled={isProcessing}
-                    className="text-xs"
+                    className="text-xs flex-1"
                   >
                     {isProcessing ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <>
-                        <X className="h-4 w-4 mr-1" />
+                        <X className="h-3 w-3 mr-1" />
                         Reject
                       </>
                     )}
