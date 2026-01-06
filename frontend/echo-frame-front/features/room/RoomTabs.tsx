@@ -14,11 +14,12 @@ interface RoomTabsProps {
   livekit: any;
   guest: any;
   audioLevel?: any;
+  socket?: any;
 }
 
 type TabType = 'chat' | 'voice' | 'users' | 'actions' | 'requests';
 
-export default function RoomTabs({ roomId, livekit, guest, audioLevel }: RoomTabsProps) {
+export default function RoomTabs({ roomId, livekit, guest, audioLevel, socket }: RoomTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const isAdminOrMod = guest?.role === 'admin' || guest?.role === 'moderator';
 
@@ -81,7 +82,7 @@ export default function RoomTabs({ roomId, livekit, guest, audioLevel }: RoomTab
           <UsersTab roomId={roomId} guest={guest} />
         )}
         {activeTab === 'actions' && (
-          <QuickActionsTab roomId={roomId} guest={guest} />
+          <QuickActionsTab roomId={roomId} guest={guest} socket={socket} />
         )}
         {activeTab === 'requests' && isAdminOrMod && (
           <JoinRequestsTab canModerate={isAdminOrMod} />

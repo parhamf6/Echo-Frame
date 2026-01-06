@@ -42,7 +42,12 @@ const getVideoUrl = (path: string): string => {
 
 export default function RoomView({ roomId }: RoomViewProps) {
   const { guest } = useGuestStore();
-  const { addPendingRequest, removePendingRequest } = useRoomStore();
+  const {
+    addPendingRequest,
+    removePendingRequest,
+    addViewerRequest,
+    removeViewerRequest,
+  } = useRoomStore();
   const { loadHistory, clearChat, historyError } = useChatStore();
   
   const [isInitialized, setIsInitialized] = useState(false);
@@ -97,7 +102,46 @@ export default function RoomView({ roomId }: RoomViewProps) {
     onVideoSwitch: (videoId: string) => {
       console.log('[RoomView] Video switched to', videoId);
     },
-    
+    onViewerRequest: (request) => {
+      console.log('[RoomView] Viewer request received in RoomView:', request);
+
+      if (!isAdminOrMod) {
+        return;
+      }
+
+      // Only track actionable playback requests, messages are handled via chat/toast
+      if (request?.type === 'pause') {
+        addViewerRequest(request);
+        toast.info(`${request.username} requested a pause`, {
+          duration: 5000,
+        });
+      } else if (request?.type === 'rewind') {
+        addViewerRequest(request);
+        const seconds = request.seconds ?? 10;
+        toast.info(`${request.username} requested rewind (${seconds}s)`, {
+          duration: 5000,
+        });
+      } else if (request?.type === 'quick_message') {
+        // Quick messages are already pushed to chat by the backend; show a subtle toast
+        if (request.message) {
+          toast.message(`${request.username}: ${request.message}`, {
+            duration: 4000,
+          });
+        }
+      }
+    },
+    onRequestApproved: (data) => {
+      console.log('[RoomView] Request approved:', data);
+      if (data?.request_id) {
+        removeViewerRequest(data.request_id);
+      }
+    },
+    onRequestDismissed: (data) => {
+      console.log('[RoomView] Request dismissed:', data);
+      if (data?.request_id) {
+        removeViewerRequest(data.request_id);
+      }
+    },
     onNewJoinRequest: (data) => {
       console.log('[RoomView] New join request received:', data);
       if (isAdminOrMod) {
@@ -630,8 +674,9 @@ export default function RoomView({ roomId }: RoomViewProps) {
           <RoomTabs
             roomId={roomId}
             livekit={livekit}
-            audioLevel={audioLevel}
             guest={guest}
+            audioLevel={audioLevel}
+            socket={socket}
           />
         </div>
       </div>

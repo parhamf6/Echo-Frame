@@ -1,18 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Pause, Rewind, MessageSquare } from 'lucide-react';
+import { Pause, Rewind, MessageSquare, XCircle, Play } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRoomStore } from '@/lib/stores/room-store';
 
 interface QuickActionsTabProps {
   roomId: string;
   guest: any;
+  socket?: any;
 }
 
-export default function QuickActionsTab({ roomId, guest }: QuickActionsTabProps) {
+export default function QuickActionsTab({ roomId, guest, socket }: QuickActionsTabProps) {
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const [quickMessage, setQuickMessage] = useState('');
+  const {
+    viewerRequests,
+    viewerRequestsVersion,
+    removeViewerRequest,
+  } = useRoomStore();
 
   const isAdminOrMod = guest?.role === 'admin' || guest?.role === 'moderator';
 
@@ -30,15 +37,31 @@ export default function QuickActionsTab({ roomId, guest }: QuickActionsTabProps)
 
   const requestPause = () => {
     if (!canSendRequest()) return;
-    
-    // This would emit via Socket.io (handled in RoomView)
-    toast.success('Pause request sent to moderators');
+    if (!socket) {
+      toast.error('Not connected to room');
+      return;
+    }
+
+    socket.emit?.('request:pause', {
+      room_id: roomId,
+      guest_id: guest?.id,
+      username: guest?.username,
+    });
   };
 
   const requestRewind = (seconds: number) => {
     if (!canSendRequest()) return;
-    
-    toast.success(`Rewind request (${seconds}s) sent to moderators`);
+    if (!socket) {
+      toast.error('Not connected to room');
+      return;
+    }
+
+    socket.emit?.('request:rewind', {
+      room_id: roomId,
+      guest_id: guest?.id,
+      username: guest?.username,
+      seconds,
+    });
   };
 
   const sendQuickMessage = () => {
@@ -48,22 +71,100 @@ export default function QuickActionsTab({ roomId, guest }: QuickActionsTabProps)
     }
 
     if (!canSendRequest()) return;
+    if (!socket) {
+      toast.error('Not connected to room');
+      return;
+    }
 
-    toast.success('Message sent to moderators');
+    socket.emit?.('request:message', {
+      room_id: roomId,
+      guest_id: guest?.id,
+      username: guest?.username,
+      message: quickMessage.trim(),
+    });
     setQuickMessage('');
   };
 
   if (isAdminOrMod) {
     return (
-      <div className="h-full flex items-center justify-center p-8">
-        <div className="text-center space-y-3">
-          <p className="text-sm text-muted-foreground">
-            As a moderator, you have direct control over playback
-          </p>
+      <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+        <div>
+          <h3 className="font-semibold text-sm mb-1">Viewer Requests</h3>
           <p className="text-xs text-muted-foreground">
-            Use the video player controls to manage the session
+            When viewers request pauses or rewinds, they will appear here. You can apply or dismiss them.
           </p>
         </div>
+
+        {viewerRequests.length === 0 && (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-xs text-muted-foreground">
+              No active playback requests from viewers.
+            </p>
+          </div>
+        )}
+
+        {viewerRequests.length > 0 && (
+          <div className="space-y-2">
+            {viewerRequests.map((req) => (
+              <div
+                key={req.id || `${req.type}-${req.timestamp}-${req.username}`}
+                className="border border-border rounded-lg p-3 bg-background/60 flex flex-col space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">
+                      {req.username}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {req.type === 'pause' && 'Requested to pause playback'}
+                      {req.type === 'rewind' && `Requested rewind by ${req.seconds ?? 10}s`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  {socket && (req.type === 'pause' || req.type === 'rewind') && req.id && (
+                    <Button
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={() => {
+                        socket.emit?.('approve:request', {
+                          request_id: req.id,
+                          room_id: roomId,
+                          guest_id: guest?.id,
+                        });
+                      }}
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Apply Request
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 text-xs"
+                    onClick={() => {
+                      if (socket && req.id) {
+                        socket.emit?.('dismiss:request', {
+                          request_id: req.id,
+                          room_id: roomId,
+                          guest_id: guest?.id,
+                        });
+                      }
+                      if (req.id) {
+                        removeViewerRequest(req.id);
+                      }
+                    }}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
